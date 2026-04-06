@@ -214,17 +214,41 @@ Antes de ejecutar CUALQUIER instrucción de este bloque, verificá:
    Si ves commits de otro tipo de sesión (ej: commits de "qa(session)" y este bloque
    dice SESSION_TYPE: journey), PARÁ y decile al usuario:
 
-   > "⚠️ Esta sesión ya tiene trabajo de tipo [QA]. Me llegó un bloque de tipo
-   > [JOURNEY]. Probablemente pegaste el bloque equivocado. ¿Querés que ejecute
-   > Journey acá igual, o preferís abrir una sesión nueva?"
+   > "⚠️ BLOQUE EQUIVOCADO DETECTADO
+   >
+   > Esta sesión ya tiene trabajo de tipo [QA]. Me llegó un bloque de tipo [JOURNEY].
+   > Probablemente pegaste el bloque equivocado.
+   >
+   > **Consecuencias de ejecutar de todas formas:**
+   > - Los commits de Journey quedarían MEZCLADOS con los de QA en la misma branch
+   > - El reporte spoke_report se sobreescribiría, perdiendo los findings del QA
+   > - El Control Session no podrá distinguir qué commits son de QA y cuáles de Journey
+   > - Si hay fixes del QA sin mergear, el merge a demo podría incluir trabajo
+   >   incompleto del Journey mezclado con el QA
+   > - El handoff queda inconsistente: dice 'QA completado' pero la branch tiene
+   >   Journey encima — la próxima sesión se confunde
+   >
+   > **Lo correcto**: abrí una sesión NUEVA para Journey y pegá el bloque ahí.
+   > Esta sesión debería quedarse como QA puro.
+   >
+   > ¿Querés que ignore esto y ejecute de todas formas? (no recomendado)"
 
-   NO ejecutes silenciosamente — preguntá primero.
+   NO ejecutes silenciosamente — SIEMPRE mostrá las consecuencias y esperá respuesta.
 
 2. **¿El bloque matchea lo que el usuario te pidió?**
    Si el usuario dijo "hacé QA" pero el bloque dice SESSION_TYPE: journey,
-   avisale del mismatch antes de proceder.
+   avisale del mismatch antes de proceder. Consecuencia: el usuario puede
+   estar confundido sobre qué sesión es esta y terminar con trabajo mezclado.
 
-Si todo OK, seguí con la verificación normal.
+3. **¿Ya existe un spoke_report de otro tipo en memory?**
+   ```bash
+   ls memory/spoke_report_*.md 2>/dev/null
+   ```
+   Si existe un spoke_report de otro tipo sin absorber, advertir:
+   "Hay un reporte de [otro tipo] pendiente. Si ejecuto [este tipo] ahora,
+   podría sobreescribirlo. ¿El Control ya absorbió el anterior?"
+
+Si todo OK, seguí con la verificación de archivos.
 
 ---
 
