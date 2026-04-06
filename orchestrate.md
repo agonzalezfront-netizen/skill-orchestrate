@@ -126,12 +126,90 @@ Con las respuestas, generá `.claude/orchestrate.yml` y mostráselo al usuario p
 
 ### Modo 2: Config existe (`.claude/orchestrate.yml` encontrado)
 
-Leé la config, leé `memory/handoff_next_session.md` y cualquier otra memoria relevante del proyecto, y arrancá el ciclo de orquestación:
+Leé la config y ejecutá la secuencia de diagnóstico para determinar en qué
+ESTADO está el proyecto antes de hacer cualquier otra cosa.
 
-#### Paso 1: Cargar contexto
+#### Paso 0: Diagnóstico de estado (SIEMPRE correr primero)
+
+Antes de presentar opciones al usuario, el skill debe diagnosticar en cuál de los
+6 estados posibles se encuentra. Esto se hace con 4 checks automáticos:
+
+```bash
+# Check A: ¿Existe handoff?
+cat memory/handoff_next_session.md 2>/dev/null | head -5
+
+# Check B: ¿Cuándo fue el último commit? (frescura del proyecto)
+git log --oneline -1 --format="%ar"
+
+# Check C: ¿Hubo commits DESPUÉS del último handoff?
+# Comparar la fecha del handoff con el último commit
+git log --oneline --since="<fecha del handoff>" | wc -l
+
+# Check D: ¿La config refleja la realidad?
+# Verificar que los paths en orchestrate.yml existen
+```
+
+**Matriz de decisión:**
+
+| Check A (handoff) | Check B (frescura) | Check C (commits post-handoff) | → Estado |
+|---|---|---|---|
+| No existe | - | - | **Estado 1**: Primera vez parcial (tiene config pero no handoff). Crear handoff desde git log. |
+| Existe, reciente (<24h) | Reciente | 0 nuevos | **Estado 3**: Retorno inmediato. Arrancar donde quedó. |
+| Existe, reciente (<24h) | Reciente | >0 nuevos | **Estado 2**: Arranque fresco con cambios. Presentar diff. |
+| Existe, viejo (>3 días) | Reciente | >0 nuevos | **Estado 4**: Retorno con gap. Reconstruir contexto. |
+| Existe, viejo (>7 días) | Cualquiera | Muchos | **Estado 5**: Proyecto cambió mucho. Reconstruir estado. |
+| Existe | - | Comandos de config fallan | **Estado 6**: Config obsoleta. Ofrecer re-configurar. |
+
+**Acciones por estado:**
+
+**Estado 1 — Config sin handoff:**
+El usuario configuró el skill pero nunca corrió una sesión completa.
+→ Crear handoff inicial desde `git log` + `git status` + explorar estructura.
+→ Presentar: "Encontré tu config pero no hay historial de sesiones previas. Voy a
+  armar el estado inicial desde tu repo."
+
+**Estado 2 — Arranque fresco (normal):**
+Todo reciente y alineado.
+→ Cargar handoff, presentar estado, sugerir siguiente paso.
+
+**Estado 3 — Retorno inmediato:**
+Mismo día, probablemente cerró y reabrió. Handoff está fresco.
+→ "Retomamos donde quedamos. Último estado: [resumen del handoff]"
+
+**Estado 4 — Retorno con gap (días/semanas sin usar el skill):**
+El handoff tiene datos viejos pero hubo actividad en el repo.
+→ Leer handoff PERO verificar contra `git log` qué cambió desde entonces.
+→ Mostrar: "Tu último handoff es del {fecha}. Desde entonces hubo {N} commits
+  que no trackeé. Los analizo para reconstruir el estado actual."
+→ Recorrer los commits nuevos, leer los mensajes, y ACTUALIZAR el handoff.
+→ Preguntar al usuario: "¿Pasó algo relevante que no esté en los commits?"
+
+**Estado 5 — Proyecto cambió mucho:**
+Handoff viejo + muchos commits → el handoff es poco confiable.
+→ "Pasaron {N} días y {M} commits desde mi último handoff. Voy a reconstruir
+  el estado del proyecto desde cero usando git + archivos."
+→ Escanear: `git log`, tests, docs, package.json changes, nuevos archivos.
+→ Generar handoff fresco basado en evidencia del repo.
+→ Pedir confirmación: "Esto es lo que entiendo del estado actual: [resumen].
+  ¿Me falta algo?"
+
+**Estado 6 — Config obsoleta:**
+Los paths o comandos del config no funcionan (ej: `docs/qa/` fue movido,
+deploy command cambió, un spoke fue eliminado).
+→ Verificar cada path/comando del config.
+→ Para cada fallo: "El config dice que {X} está en {path}, pero no existe.
+  ¿Se movió o se eliminó?"
+→ Ofrecer: "¿Querés que actualice la config?" + re-hacer las preguntas
+  solo para las partes que cambiaron.
+
+#### Paso 1: Cargar contexto (después del diagnóstico)
+
+Una vez determinado el estado, cargar contexto relevante:
+
 ```
 1. Leer .claude/orchestrate.yml → saber qué spokes tiene el proyecto
-2. Leer memory/handoff_next_session.md → saber estado actual
+2. Leer memory/handoff_next_session.md → saber estado actual (puede estar
+   recién creado o recién actualizado por el diagnóstico)
 3. Buscar memory/spoke_report_*.md → reportes de spokes pendientes de absorber
 4. Leer memory/project_prospect_feedback_scores.md → si existe, prioridades
 5. Leer memory/MEMORY.md → índice de todo lo que hay
