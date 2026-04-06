@@ -51,6 +51,29 @@ The skill has two parts:
 
 The skill is project-agnostic. It doesn't know about your tech stack, your deploy process, or your domain. All project-specific knowledge comes from the config file.
 
+## Requirements
+
+Before installing, make sure you have:
+
+| Dependency | Why it's needed | How to check |
+|---|---|---|
+| **Claude Code** | The CLI tool this skill runs inside | `claude --version` |
+| **Git** | Communication channel between sessions (branches, logs, diff) | `git --version` |
+| **A Git repository** | Your project must be a git repo (the skill uses branches to track spoke work) | `git status` in your project dir |
+| **Bash-compatible shell** | The skill generates bash commands for verification and deploy | `bash --version` |
+
+**Optional but recommended:**
+
+| Dependency | Why | How to check |
+|---|---|---|
+| **GitHub CLI (`gh`)** | For creating PRs from spoke branches | `gh --version` |
+| **Node.js / Python** | Only if your project uses them for build/deploy | `node --version` / `python --version` |
+
+**Not required:**
+- No database
+- No cloud account
+- No paid API keys (the skill itself is pure orchestration — it doesn't call any AI APIs)
+
 ## Installation
 
 ### 1. Install the skill (one-time, user-level)
@@ -320,6 +343,29 @@ Volvés a la Sesión de Control
   → Control genera el siguiente bloque spoke (Feature, Journey, etc.)
   → El ciclo continúa
 ```
+
+## Requisitos
+
+Antes de instalar, verificá que tengas:
+
+| Dependencia | Para qué se necesita | Cómo verificar |
+|---|---|---|
+| **Claude Code** | La herramienta CLI donde corre este skill | `claude --version` |
+| **Git** | Canal de comunicación entre sesiones (branches, logs, diff) | `git --version` |
+| **Un repositorio Git** | Tu proyecto debe ser un repo git (el skill usa branches para trackear trabajo de spokes) | `git status` en tu directorio |
+| **Shell compatible con Bash** | El skill genera comandos bash para verificación y deploy | `bash --version` |
+
+**Opcionales pero recomendados:**
+
+| Dependencia | Para qué | Cómo verificar |
+|---|---|---|
+| **GitHub CLI (`gh`)** | Para crear PRs desde branches de spokes | `gh --version` |
+| **Node.js / Python** | Solo si tu proyecto los usa para build/deploy | `node --version` / `python --version` |
+
+**No se necesita:**
+- Base de datos
+- Cuenta cloud
+- API keys pagas (el skill es pura orquestación — no llama APIs de IA)
 
 ## Instalación
 
