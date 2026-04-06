@@ -326,6 +326,42 @@ roles: []
 - **Don't open a new Feature session** for the same area of code — the existing one knows the codebase better
 - **Do open a new session** only when starting a genuinely different type of work with no prior context
 
+## Lifecycle: what happens when you return after a break
+
+Every time you run `/orchestrate`, the skill diagnoses which state your project is in:
+
+| State | Situation | What the skill does |
+|---|---|---|
+| **First time** | Config exists but no handoff | Builds initial state from git log |
+| **Fresh start** | Recent handoff, everything aligned | Normal flow — loads and presents |
+| **Immediate return** | Same day, session reopened | "Resuming where we left off" |
+| **Return with gap** | Days/weeks without using the skill | Scans git for untracked changes, reconstructs state |
+| **Major changes** | Stale handoff + many new commits | Full rebuild from repo evidence, asks user to confirm |
+| **Obsolete config** | Paths or commands don't work anymore | Checks each config entry, offers to re-configure broken parts |
+
+This diagnosis runs **automatically** — you don't need to tell the skill "I was away for 2 weeks." It figures it out from git timestamps.
+
+## Re-validation cycle
+
+After shipping a batch of features/fixes, the skill recommends re-validation before continuing with new work:
+
+```
+Implement features → Deploy → Session A (QA) → Fix bugs → Session B (Journey) → Confirm scores → Next batch
+```
+
+The Control Session shows a warning when changes have been shipped without re-validation: *"N changes shipped since last QA+Journey. Recommend re-validating before adding more features."*
+
+## Mandatory handoff on close
+
+When you close or pause a Control Session, the skill **always** updates `memory/handoff_next_session.md` with:
+- What was done (commits, features, fixes)
+- Validation state (QA+Journey ran or pending)
+- Current scores (confirmed or estimated)
+- Next recommended step
+- Active spoke sessions
+
+Rule: **if the next `/orchestrate` needs to ask "what happened?", the handoff failed.**
+
 ## Smart block generation
 
 The Control Session adapts blocks based on whether a spoke is new or returning:
@@ -378,9 +414,20 @@ Day 2 — Control Session:
 
 Day 2 — Journey Session (2nd run, SAME session):
   → Re-validated with same personas
-  → Scores: Director 9.5, Tutor 9.0, Assistant 8.5
-  → Compared vs round 1 with full context
+  → Scores: Director 9.0, Tutor 8.5, Assistant 8.5
+
+Day 2 — Control Session:
+  → Absorbed R2 Journey report
+  → Implemented 5 more fixes (global view, templates, classifier)
+  → Triggered re-validation cycle
+
+Day 2 — Journey Session (3rd run, SAME session):
+  → R3: Director 9.5, Tutor 9.0, Assistant 9.0
+  → Average: 7.0 → 8.7 → 9.2 across 3 rounds
+  → All 3 personas would sign a pilot contract
 ```
+
+Total over 2 days: 35+ commits, 50+ tests, 3 validation rounds, automated deploy pipeline, product went from "interesting prototype" to "demo-ready" — all coordinated through `/orchestrate`.
 
 ## FAQ
 
@@ -398,6 +445,15 @@ The block includes a `SESSION_TYPE` check. If it detects a type mismatch (e.g., 
 
 **Q: Should I close spoke sessions between runs?**
 No! Keep them open. A QA session that already ran once will be faster and more accurate on the second run because it has context from the first.
+
+**Q: What if I come back after weeks without using the skill?**
+The skill auto-detects this. It compares the handoff date with the latest git commits. If there's a gap, it scans the git log, reconstructs the project state, and asks you to confirm before proceeding. You don't need to explain what happened — it figures it out.
+
+**Q: What if someone else worked on the project without using the skill?**
+Same as above. The skill detects commits it didn't track and incorporates them. It might ask: "I see 15 commits I don't know about. Let me analyze them." Then it updates the handoff with the new state.
+
+**Q: Does the Journey session track score breakdowns?**
+Yes. The skill requires Journey reports to include per-persona breakdowns: what added points (+X for Y), what subtracted (-X for Z), and why the score is what it is. Without the breakdown, the Control can't prioritize what to fix next.
 
 **Q: Does this work with any project?**
 Yes. The skill is generic. The config makes it project-specific. Works for React, Python, mobile, static sites — anything with git.
@@ -525,6 +581,37 @@ Configurar por proyecto: corré `/orchestrate` y respondé 6 preguntas.
 | **Dev** (Spoke) | Fixes rápidos y mejoras | Sí — conoce fixes previos |
 | **Deploy** (Spoke) | Setup hosting, pipeline, debug prod | Sí — conoce la infra |
 
+## Ciclo de vida: qué pasa cuando volvés después de un tiempo
+
+Cada vez que corrés `/orchestrate`, el skill diagnostica en qué estado está tu proyecto:
+
+| Estado | Situación | Qué hace el skill |
+|---|---|---|
+| **Primera vez** | Config sin handoff | Construye estado desde git log |
+| **Arranque fresco** | Handoff reciente, todo alineado | Flujo normal |
+| **Retorno inmediato** | Mismo día | "Retomamos donde quedamos" |
+| **Retorno con gap** | Días/semanas sin el skill | Escanea git, reconstruye estado |
+| **Cambios grandes** | Handoff viejo + muchos commits | Rebuild completo desde el repo |
+| **Config obsoleta** | Paths/comandos no funcionan | Verifica cada entrada, ofrece re-configurar |
+
+El diagnóstico corre **automáticamente** — no necesitás decirle "estuve 2 semanas afuera".
+
+## Ciclo de re-validación
+
+Después de shipear un batch de features/fixes, el skill recomienda re-validar:
+
+```
+Implementar → Deploy → Session A (QA) → Fix bugs → Session B (Journey) → Confirmar scores → Siguiente batch
+```
+
+El Control muestra advertencia si hay cambios sin validar.
+
+## Handoff obligatorio al cerrar
+
+Al cerrar o pausar una Control Session, el skill **siempre** actualiza el handoff con: qué se hizo, estado de validación, scores, próximo paso, spokes activos.
+
+Regla: **si el próximo `/orchestrate` necesita preguntar "qué pasó?", el handoff falló.**
+
 ## Generación inteligente de bloques
 
 | Escenario | Qué genera el Control |
@@ -552,6 +639,15 @@ El bloque tiene un check `SESSION_TYPE`. Si detecta mismatch, muestra las consec
 
 **P: Debo cerrar los spokes entre corridas?**
 No. Mantené las sesiones abiertas. Un QA que ya corrió una vez será más rápido y preciso la segunda vez porque tiene contexto.
+
+**P: Qué pasa si vuelvo después de semanas sin usar el skill?**
+El skill lo detecta solo. Compara la fecha del handoff con los commits recientes. Si hay gap, escanea el git log, reconstruye el estado, y te pide confirmar antes de seguir.
+
+**P: Qué pasa si otra persona trabajó en el proyecto sin el skill?**
+Lo mismo. El skill detecta commits que no trackeó y los incorpora. Puede preguntar: "Veo 15 commits que no conozco. Los analizo."
+
+**P: El Journey trackea desglose de scores?**
+Sí. El skill exige que los reportes de Journey incluyan desglose por persona: qué sumó (+X por Y), qué restó (-X por Z), y por qué ese score. Sin desglose, el Control no puede priorizar qué arreglar.
 
 **P: Funciona con cualquier proyecto?**
 Sí. El skill es genérico. La config lo adapta. Funciona con React, Python, mobile, sitios estáticos — cualquier cosa con git.
