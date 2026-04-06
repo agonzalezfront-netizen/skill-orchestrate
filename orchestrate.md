@@ -201,12 +201,39 @@ Estructura del bloque:
 
 ---INICIO DEL BLOQUE---
 
+## ⚠️ VALIDACIÓN DE SESIÓN (corré esto ANTES de hacer cualquier otra cosa)
+
+SESSION_TYPE: {tipo}
+
+Antes de ejecutar CUALQUIER instrucción de este bloque, verificá:
+
+1. **¿Ya hiciste trabajo de OTRO tipo en esta sesión?**
+   ```bash
+   git log --oneline -10
+   ```
+   Si ves commits de otro tipo de sesión (ej: commits de "qa(session)" y este bloque
+   dice SESSION_TYPE: journey), PARÁ y decile al usuario:
+
+   > "⚠️ Esta sesión ya tiene trabajo de tipo [QA]. Me llegó un bloque de tipo
+   > [JOURNEY]. Probablemente pegaste el bloque equivocado. ¿Querés que ejecute
+   > Journey acá igual, o preferís abrir una sesión nueva?"
+
+   NO ejecutes silenciosamente — preguntá primero.
+
+2. **¿El bloque matchea lo que el usuario te pidió?**
+   Si el usuario dijo "hacé QA" pero el bloque dice SESSION_TYPE: journey,
+   avisale del mismatch antes de proceder.
+
+Si todo OK, seguí con la verificación normal.
+
+---
+
 Sos una sesión de {tipo}. Tu trabajo es {descripción en 1 oración}.
 
 ## Tu contexto
 {resumen del proyecto en 3-5 líneas — qué es, qué stack usa, en qué estado está}
 
-## Verificación (corré esto primero)
+## Verificación de archivos (corré esto segundo)
 ```bash
 {comandos ls/git para verificar que los archivos necesarios existen}
 ```
