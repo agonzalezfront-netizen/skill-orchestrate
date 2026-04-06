@@ -260,7 +260,12 @@ Total: 26 commits, 45 backend tests, 37 frontend tests, 3 personas evaluated, au
 ## FAQ
 
 **Q: Can sessions talk to each other directly?**
-No. You're the bridge. You copy blocks from Control and paste them into spokes. When spokes finish, you copy their report back to Control. The skill minimizes what you need to think about — it's just copy-paste.
+Not directly, but almost. The communication works through **shared memory files + git branches**:
+
+1. **Control → Spoke**: you copy the initial instruction block (one-time, unavoidable)
+2. **Spoke → Control**: the spoke writes its report to `memory/spoke_report_{type}.md` and commits its work to its branch. When you go back to Control, just say **"absorb reports"** — Control reads the memory file + the git branch automatically. **Zero copy-paste on the return trip.**
+
+The spoke's report includes its branch name. Control uses `git log {branch}` and `git show {branch}:{file}` to read everything the spoke did, without needing to be in the same worktree.
 
 **Q: Do I need all 4 spoke types?**
 No. Start with `feature` + `dev`. Add `qa` when your product is mature enough to test systematically. Add `journey` when you have real or simulated prospects to validate with.
@@ -409,7 +414,12 @@ Control Session (hub)
 ## Preguntas frecuentes
 
 **P: Las sesiones pueden hablar entre sí?**
-No. Vos sos el puente. Copiás bloques del Control y los pegás en los spokes. Cuando terminan, copiás sus reportes de vuelta. El skill minimiza lo que tenés que pensar — es solo copy-paste.
+No directamente, pero casi. La comunicación funciona via **memory files compartidos + branches de git**:
+
+1. **Control → Spoke**: copiás el bloque de instrucciones inicial (1 vez, inevitable)
+2. **Spoke → Control**: el spoke escribe su reporte en `memory/spoke_report_{tipo}.md` y commitea su trabajo a su branch. Cuando volvés al Control, solo decís **"absorbé los reportes"** — Control lee el memory file + la branch del spoke automáticamente. **Cero copy-paste en el viaje de vuelta.**
+
+El reporte del spoke incluye el nombre de su branch. Control usa `git log {branch}` y `git show {branch}:{archivo}` para leer todo lo que hizo el spoke, sin necesidad de estar en el mismo worktree.
 
 **P: Necesito los 4 tipos de spoke?**
 No. Empezá con `feature` + `dev`. Agregá `qa` cuando tu producto esté lo suficientemente maduro. Agregá `journey` cuando tengas prospectos reales o simulados para validar.
