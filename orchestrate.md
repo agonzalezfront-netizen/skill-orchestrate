@@ -371,7 +371,46 @@ Mostrá este mensaje al usuario:
 ---FIN DEL BLOQUE---
 ```
 
-#### Paso 5: Absorber reportes (cuando el usuario dice "absorbé los reportes" o similar)
+#### Paso 5: Cierre de Control Session (obligatorio antes de cerrar o pausar)
+
+Cuando el usuario indica que quiere cerrar, pausar, o "retomar mañana", SIEMPRE
+actualizar `memory/handoff_next_session.md` con:
+
+1. **Qué se hizo** en esta sesión (lista de commits/features/fixes)
+2. **Estado de validación** (¿se corrió Session A+B después de los últimos cambios?)
+3. **Scores actuales** (confirmados por Journey o estimados — marcar cuál)
+4. **Spoke reports pendientes** (¿hay alguno sin absorber?)
+5. **Próximo paso recomendado** (qué haría la próxima Control Session primero)
+6. **Spokes activos** (qué sesiones spoke están abiertas y en qué estado)
+
+El handoff debe ser suficiente para que la próxima invocación de `/orchestrate`
+arranque sin preguntarle nada al usuario. Si `/orchestrate` necesita preguntar
+"¿qué pasó desde la última vez?", el handoff falló.
+
+**Template mínimo del handoff:**
+```markdown
+## Estado al {fecha}
+- Branch: {branch}, HEAD: {sha}
+- Scores: Director {X}, Tutor {Y}, Ayudante {Z} ({confirmados/estimados})
+- Validación: {Session A+B corridas/pendientes}
+- Último cambio: {descripción del último commit relevante}
+
+## Qué se hizo
+{lista numerada de features/fixes/infra}
+
+## Próximo paso
+{recomendación concreta — no "decidir qué hacer" sino "hacer X porque Y"}
+
+## Spokes activos
+- QA: {última corrida, estado}
+- Journey: {última corrida, ronda N, estado}
+- Feature: {abierta/cerrada}
+```
+
+NUNCA cerrar una Control Session sin actualizar el handoff. Si el usuario dice
+"cerremos" y el handoff no está actualizado, actualizalo ANTES de cerrar.
+
+#### Paso 6: Absorber reportes (cuando el usuario dice "absorbé los reportes" o similar)
 
 1. Buscar `memory/spoke_report_*.md` (excluyendo los `*_absorbed.md`)
 2. Para cada reporte:
