@@ -291,6 +291,16 @@ git commit -m "{tipo}(session): {resumen de lo que hiciste}"
 ```
 
 ### 2. Escribí tu reporte en memory (para que Control lo lea)
+
+**IMPORTANTE para Journey sessions**: el reporte DEBE incluir el DESGLOSE
+de cada score, no solo el número. Para cada persona:
+- Qué sumó (cada item con puntos: "+1 por X, +0.5 por Y")
+- Qué restó (cada item con puntos: "-0.5 por Z")
+- Por qué el score es ese y no más alto
+- Si es una re-corrida: qué cambió vs la ronda anterior
+
+Sin desglose, el Control no puede priorizar qué arreglar primero.
+
 Creá el archivo memory/spoke_report_{tipo}.md con este contenido:
 
 ```markdown
