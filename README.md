@@ -1,6 +1,6 @@
 # Skill Orchestrate
 
-**Session Orchestrator for Claude Code** — coordinate multiple Claude Code sessions using a hub-and-spoke pattern.
+**Session Orchestrator for Claude Code** — coordinate multiple Claude Code sessions using a hub-and-spoke pattern. Sessions are **persistent and reusable** — they accumulate context over time and get better with each run.
 
 > **[Leer en Espanol](#espanol)**
 
@@ -18,28 +18,45 @@ When you work on a real project with Claude Code, you quickly realize one sessio
 
 The problem: **sessions can't talk to each other**. Each one starts fresh with no context about what the others did.
 
-**Skill Orchestrate** solves this by making the Control Session generate **copy-paste ready instruction blocks** for each spoke session. You're the bridge — you copy from Control, paste into the spoke, and when the spoke finishes, you copy its report back to Control.
+**Skill Orchestrate** solves this with two mechanisms:
+1. **Control → Spoke**: you copy-paste an instruction block (one-time per spoke)
+2. **Spoke → Control**: the spoke writes its report to a shared memory file + commits its work to its git branch. Control reads both automatically. **Zero copy-paste on the return trip.**
 
 ```
 You open Control Session
   -> /orchestrate
   -> Control reads project state, presents options
   -> You choose: "I need a QA session"
-  -> Control generates a text block with EVERYTHING the QA session needs
+  -> Control asks: "New session or the one that already ran QA before?"
+  -> Control generates a context-aware text block
   -> You copy it
 
-You open QA Session
+You open QA Session (new or returning)
   -> You paste the block
-  -> QA session works autonomously (no questions, no "where is X?")
-  -> QA finishes, generates a report block
-  -> You copy the report
+  -> QA works autonomously
+  -> QA finishes, writes memory/spoke_report_qa.md + commits work
+  -> QA tells you: "Done. Tell Control to absorb reports."
 
 You go back to Control Session
-  -> You paste the QA report
-  -> Control absorbs results, re-prioritizes
-  -> Control generates the next spoke block (Feature, Journey, etc.)
-  -> Cycle continues
+  -> You say: "absorb reports"
+  -> Control reads memory file + git branch automatically
+  -> Control absorbs results, re-prioritizes, suggests next step
+  -> No copy-paste needed
 ```
+
+## Key concept: sessions are persistent
+
+**Spokes are NOT disposable.** You reuse them across the project lifecycle:
+
+| Session | 1st run | 2nd run | 3rd run | ... |
+|---|---|---|---|---|
+| **QA** | Full scan, finds 8 bugs | Focused re-scan on fixed modules, finds 2 regressions | Quick smoke test pre-launch | Knows all prior findings |
+| **Journey** | 3 personas score 6.5-7.5 | Re-validates after fixes, scores 8.5-9.5 | Tests with a new 4th persona | Compares across rounds |
+| **Feature** | Implements auth system | Adds OAuth provider | Adds MFA | Knows the auth codebase intimately |
+
+Each subsequent run is **faster and more accurate** because the session has context from prior runs. The Control Session tracks which spokes ran when and adapts its instruction blocks accordingly (see "Smart block generation" below).
+
+**Important for the user:** keep your spoke sessions open! Don't close a QA session after it runs — you'll want it again after the next batch of fixes.
 
 ## How it works
 
@@ -67,13 +84,34 @@ Before installing, make sure you have:
 
 | Dependency | Why | How to check |
 |---|---|---|
-| **GitHub CLI (`gh`)** | Automates GitHub operations that would be manual otherwise (see below) | `gh --version` |
+| **GitHub CLI (`gh`)** | Automates GitHub operations (see [why `gh`](#why-github-cli-gh-is-worth-installing)) | `gh --version` |
+| **Hosting access** (SSH / cPanel API / Platform CLI) | Enables fully automated deploys (see [hosting setup](#hosting-access-ssh--cpanel-api--platform-cli)) | Depends on method |
+| **Superpowers skills** | TDD, plans, debugging, code review (see [recommended skills](#recommended-complementary-skills)) | Check `~/.claude/` |
+| **Frontend Design skill** | High-quality UI implementation | Check available skills |
 | **Node.js / Python** | Only if your project uses them for build/deploy | `node --version` / `python --version` |
 
 **Not required:**
 - No database
 - No cloud account
 - No paid API keys (the skill itself is pure orchestration — it doesn't call any AI APIs)
+
+### Recommended complementary skills
+
+This skill handles **coordination**. For the actual work inside each session, these skills significantly improve quality:
+
+| Skill | What it does | Which spokes benefit |
+|---|---|---|
+| `superpowers:writing-plans` | Creates TDD implementation plans with step-by-step tasks | Feature sessions |
+| `superpowers:subagent-driven-development` | Executes plans via fresh subagents with two-stage review | Feature sessions |
+| `superpowers:test-driven-development` | Test first, implement second, verify always | Feature + Dev sessions |
+| `superpowers:systematic-debugging` | Root-cause analysis before proposing fixes | QA + Dev sessions |
+| `superpowers:brainstorming` | Explores user intent and requirements before implementation | Control session (design phase) |
+| `superpowers:finishing-a-development-branch` | Merge/PR/cleanup workflow after implementation | Feature sessions |
+| `superpowers:requesting-code-review` | Structured code review before merging | Feature sessions |
+| `superpowers:verification-before-completion` | Evidence-based verification before claiming "done" | All sessions |
+| `frontend-design:frontend-design` | Production-grade UI with distinctive aesthetics (not generic AI slop) | Feature + Dev sessions |
+
+**How they interact:** the Control session designs and plans (brainstorming + writing-plans). Feature spokes implement (subagent-driven-development + TDD). QA spokes debug (systematic-debugging). All spokes verify (verification-before-completion). The orchestrator coordinates; the skills execute.
 
 ### Why GitHub CLI (`gh`) is worth installing
 
@@ -86,542 +124,283 @@ Without `gh`, these tasks require you to open the browser, navigate GitHub, and 
 | View PR status/checks | Open GitHub → find PR → check status | `gh pr status` |
 | Merge a PR | Open GitHub → click Merge → confirm | `gh pr merge --squash` |
 | Create an issue | Open GitHub → Issues → New → fill form | `gh issue create --title "..."` |
-| View repo info | Open GitHub → navigate | `gh repo view` |
-| Push spoke branches | Works with plain `git push` | Same, but `gh` adds PR creation on top |
 
 **For this skill specifically**, `gh` enables:
-- Control Session can **create PRs automatically** when merging spoke branches (instead of direct merge)
+- Control Session can **create PRs automatically** when merging spoke branches
 - Spoke sessions can **push their branches** and create draft PRs in one step
 - Control can **check CI status** of spoke branches before merging
-- The whole flow stays in the terminal — no browser context-switching
 
-### How to install GitHub CLI and authenticate
+<details>
+<summary><strong>How to install and authenticate GitHub CLI</strong></summary>
 
-#### Step 1: Install `gh`
-
-**Windows:**
+**Install:**
 ```bash
-# Using winget (Windows 10/11)
+# Windows
 winget install --id GitHub.cli
 
-# Or using scoop
-scoop install gh
-
-# Or using chocolatey
-choco install gh
-```
-
-**macOS:**
-```bash
+# macOS
 brew install gh
-```
 
-**Linux (Debian/Ubuntu):**
-```bash
+# Linux
 sudo apt install gh
-# Or: sudo snap install gh
 ```
 
-**Verify installation:**
-```bash
-gh --version
-# Should show: gh version 2.x.x
-```
-
-#### Step 2: Authenticate with your GitHub account
-
+**Authenticate:**
 ```bash
 gh auth login
+# Choose: GitHub.com → HTTPS → Yes → Login with web browser
+# Follow the one-time code flow in your browser
 ```
 
-This starts an interactive flow:
-```
-? What account do you want to log into?
-  > GitHub.com
-  > GitHub Enterprise Server
-
-? What is your preferred protocol for Git operations on this host?
-  > HTTPS    ← recommended for simplicity
-  > SSH
-
-? Authenticate Git with your GitHub credentials?
-  > Yes
-
-? How would you like to authenticate GitHub CLI?
-  > Login with a web browser    ← easiest option
-  > Paste an authentication token
-```
-
-**Option A — Login with web browser (easiest):**
-1. `gh` shows you a one-time code (e.g., `A1B2-C3D4`)
-2. Opens your browser to `github.com/login/device`
-3. You paste the code and click "Authorize"
-4. Done — `gh` is now authenticated
-
-**Option B — Personal Access Token (for servers/CI):**
-1. Go to https://github.com/settings/tokens
-2. Click "Generate new token (classic)"
-3. Select scopes: `repo`, `workflow`, `read:org`
-4. Copy the token
-5. Paste it when `gh auth login` asks
-
-#### Step 3: Verify it works
-
+**Verify:**
 ```bash
 gh auth status
-# Should show:
 # ✓ Logged in to github.com as YOUR_USERNAME
-# ✓ Git operations protocol: https
-# ✓ Token: gho_****
-
-# Quick test — view any public repo:
-gh repo view cli/cli
 ```
-
-#### Troubleshooting
 
 | Problem | Solution |
 |---|---|
 | `gh: command not found` | Restart your terminal after installing |
 | `error: authentication required` | Run `gh auth login` again |
 | `error: insufficient scope` | Regenerate token with `repo` + `workflow` scopes |
-| Behind a corporate proxy | `gh auth login --hostname github.mycompany.com` |
+</details>
 
 ### Hosting access (SSH / cPanel API / Platform CLI)
 
-If your project is deployed on a hosting provider, giving the skill access to your hosting enables **fully automated end-to-end deploys** — from code change to live in production, without opening a browser or uploading files manually.
+If your project is deployed on a hosting provider, giving the skill access to your hosting enables **fully automated end-to-end deploys** — from code change to live in production, without opening a browser.
 
 #### The automation ladder
 
-Each level unlocks more automation. Start wherever you are and move up when ready:
-
-| Level | What you have | What the skill can automate | Manual work remaining |
+| Level | What you have | What the skill automates | Manual work |
 |---|---|---|---|
-| **0 — Nothing** | No hosting access configured | Nothing — you upload files manually | Everything: build, upload, restart |
-| **1 — SSH access** | SSH key or password to your server | `rsync` files + restart server remotely | Nothing — fully automated |
-| **2 — cPanel API token** | API token from cPanel (no SSH needed) | Upload files via UAPI + restart app | Nothing — fully automated (our approach for StudentHub) |
-| **3 — Platform CLI** | Vercel/Netlify/Railway/Fly CLI installed | `vercel deploy --prod` or equivalent | Nothing — one command |
-| **4 — CI/CD pipeline** | GitHub Actions / GitLab CI configured | Push to branch = auto deploy | Nothing — git push is the deploy |
+| **0 — Nothing** | No hosting configured | Nothing | Everything |
+| **1 — SSH** | SSH key to your server | `rsync` + restart remotely | Nothing |
+| **2 — cPanel API** | API token (no SSH needed) | Upload via UAPI + restart | Nothing |
+| **3 — Platform CLI** | Vercel/Netlify/Railway CLI | `vercel deploy --prod` | Nothing |
+| **4 — CI/CD** | GitHub Actions configured | `git push` = auto deploy | Nothing |
 
-**You don't need all of these.** Pick the one that matches your hosting. Most projects only need ONE.
+Pick ONE that matches your hosting. Most projects only need one.
 
-#### Option A: SSH access (most hosting providers)
+<details>
+<summary><strong>Detailed setup for each option (SSH, cPanel, Platform CLI, CI/CD)</strong></summary>
 
-The most universal option. If your hosting gives you SSH access, the skill can deploy with `rsync` + `ssh`:
-
-**How to set it up:**
-
-1. **Check if your hosting supports SSH.** Most VPS (DigitalOcean, Linode, Hetzner), dedicated servers, and some shared hosting (like cPanel-based hosts) do. Look for "SSH Access" or "Terminal" in your hosting panel.
-
-2. **Get your credentials:**
-   - **Host**: your server's IP or domain (e.g., `myserver.com` or `203.0.113.50`)
-   - **User**: your SSH username (e.g., `root`, `deploy`, `myuser`)
-   - **Auth**: either a password or (better) an SSH key pair
-
-3. **Generate an SSH key** (if you don't have one):
-   ```bash
-   ssh-keygen -t ed25519 -C "deploy-key"
-   # Press Enter for default location (~/.ssh/id_ed25519)
-   # Optionally set a passphrase
-   ```
-
-4. **Add the public key to your server:**
-   ```bash
-   ssh-copy-id user@myserver.com
-   # Or manually: copy ~/.ssh/id_ed25519.pub content to
-   # ~/.ssh/authorized_keys on the server
-   ```
-
-5. **Test the connection:**
-   ```bash
-   ssh user@myserver.com "echo 'SSH works!'"
-   ```
-
-6. **Store credentials in your project** (gitignored):
-   ```bash
-   # Create a credentials file (add to .gitignore!)
-   cat > data/deploy_ssh.txt << 'EOF'
-   host=myserver.com
-   user=deploy
-   key=~/.ssh/id_ed25519
-   remote_path=/var/www/myapp
-   EOF
-
-   # Make sure it's gitignored
-   echo "data/*.txt" >> .gitignore
-   ```
-
-7. **Configure in orchestrate.yml:**
-   ```yaml
-   deploy:
-     build: "npm run build"
-     frontend: "rsync -avz --delete dist/ deploy@myserver.com:/var/www/myapp/"
-     restart: "ssh deploy@myserver.com 'sudo systemctl restart myapp'"
-   ```
-
-**What this enables:** spoke sessions can build + deploy + restart in one command chain. No browser, no FTP, no file manager.
-
-#### Option B: cPanel API token (shared hosting without SSH)
-
-If your hosting uses cPanel but SSH is blocked (common with shared hosting), you can still automate deploys via the cPanel UAPI. This is what we used for StudentHub on pulsed.cl.
-
-**How to set it up:**
-
-1. **Log into cPanel** (usually at `yourdomain.com:2083` or via your hosting panel)
-
-2. **Generate an API token:**
-   - Go to **Security** → **Manage API Tokens**
-   - Click **Create**
-   - Name it something descriptive (e.g., `claude-deploy`)
-   - Copy the token — you won't see it again
-
-3. **Find your cPanel details:**
-   - **cPanel host**: the domain in your browser's address bar (e.g., `s550.v2nets.com`)
-   - **cPanel port**: usually `2083` (HTTPS)
-   - **Username**: your cPanel username (visible in the top-right of cPanel)
-   - **App path**: where your app lives on the server (e.g., `/home/myuser/myapp/`)
-
-4. **Store credentials** (gitignored):
-   ```bash
-   cat > data/cpanel_credentials.txt << 'EOF'
-   host=yourdomain.com
-   cpanel_host=s550.v2nets.com
-   cpanel_port=2083
-   user=myuser
-   cpanel_api_token=YOUR_TOKEN_HERE
-   remote_path=/home/myuser/myapp
-   EOF
-   ```
-
-5. **Create a deploy script** (or use ours as a template):
-   The skill can help you create a `scripts/deploy_cpanel.py` that uses the cPanel UAPI to:
-   - Upload files via `Fileman::upload_files`
-   - Create directories via API2 `Fileman::mkdir`
-   - Restart your Python/Node app by touching `tmp/restart.txt`
-
-6. **Configure in orchestrate.yml:**
-   ```yaml
-   deploy:
-     build: "npm run build"
-     frontend: "python scripts/deploy_cpanel.py"
-     backend: "python scripts/deploy_cpanel.py --backend-file {file}"
-     restart: "python scripts/deploy_cpanel.py --restart-only"
-   ```
-
-**Advantage over SSH**: works even when the hosting provider blocks SSH connections. All communication goes through HTTPS to the cPanel API.
-
-#### Option C: Platform CLI (Vercel, Netlify, Railway, Fly.io, etc.)
-
-Modern platforms have their own CLIs that handle everything:
+#### Option A: SSH
 
 ```bash
-# Vercel
-npm i -g vercel && vercel login
-# Deploy: vercel deploy --prod
-
-# Netlify
-npm i -g netlify-cli && netlify login
-# Deploy: netlify deploy --prod
-
-# Railway
-npm i -g @railway/cli && railway login
-# Deploy: railway up
-
-# Fly.io
-curl -L https://fly.io/install.sh | sh && fly auth login
-# Deploy: fly deploy
+ssh-keygen -t ed25519 -C "deploy-key"
+ssh-copy-id user@myserver.com
+ssh user@myserver.com "echo 'SSH works!'"
 ```
 
-**Configure in orchestrate.yml:**
+Configure in `orchestrate.yml`:
 ```yaml
 deploy:
-  build: "npm run build"
-  frontend: "vercel deploy --prod"  # or netlify/railway/fly
+  frontend: "rsync -avz --delete dist/ deploy@myserver.com:/var/www/myapp/"
+  restart: "ssh deploy@myserver.com 'sudo systemctl restart myapp'"
 ```
 
-**Simplest option** if your project is on one of these platforms — one command deploys everything.
+#### Option B: cPanel API (no SSH needed)
 
-#### Option D: CI/CD Pipeline (GitHub Actions)
+1. cPanel → Security → Manage API Tokens → Create
+2. Store token in `data/cpanel_credentials.txt` (gitignored)
+3. The skill can help create a `scripts/deploy_cpanel.py`
 
-The most automated: just `git push` and the pipeline handles everything.
+```yaml
+deploy:
+  frontend: "python scripts/deploy_cpanel.py"
+  backend: "python scripts/deploy_cpanel.py --backend-file {file}"
+  restart: "python scripts/deploy_cpanel.py --restart-only"
+```
 
-**How to set up a basic deploy pipeline:**
+#### Option C: Platform CLI
 
-1. Create `.github/workflows/deploy.yml`:
-   ```yaml
-   name: Deploy
-   on:
-     push:
-       branches: [main]  # or your base branch
+```bash
+# Vercel: npm i -g vercel && vercel login
+# Netlify: npm i -g netlify-cli && netlify login
+# Railway: npm i -g @railway/cli && railway login
+```
 
-   jobs:
-     deploy:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v4
-         - uses: actions/setup-node@v4
-           with:
-             node-version: '20'
-         - run: npm ci && npm run build
-         - run: # your deploy command here
-   ```
+```yaml
+deploy:
+  frontend: "vercel deploy --prod"
+```
 
-2. **Configure in orchestrate.yml:**
-   ```yaml
-   deploy:
-     build: ""  # CI handles it
-     frontend: "git push origin main"  # push = deploy
-   ```
+#### Option D: CI/CD (GitHub Actions)
 
-**Best for teams**: every merge to main auto-deploys. Spoke sessions just push to their branch, Control merges to main, CI deploys.
+Create `.github/workflows/deploy.yml`, then:
+```yaml
+deploy:
+  frontend: "git push origin main"  # push = deploy
+```
 
 #### Security reminder
-
-Whatever method you choose:
-- **Never commit credentials to git.** Use `.gitignore` for credential files.
-- **Use the minimum permissions needed.** A deploy key doesn't need admin access.
-- **Rotate tokens periodically.** If a token leaks, revoke and regenerate.
-- **The skill stores credentials as file paths in the config, not the credentials themselves.** Your `.claude/orchestrate.yml` says `data/cpanel_credentials.txt` (safe to commit), not the actual token (never commit).
+- **Never commit credentials to git.** Use `.gitignore`.
+- **Use minimum permissions.** Deploy key ≠ admin access.
+- **Rotate tokens periodically.**
+- Config stores **file paths** to credentials, not the credentials themselves.
+</details>
 
 ## Installation
 
 ### 1. Install the skill (one-time, user-level)
 
 ```bash
-# Create the commands directory if it doesn't exist
 mkdir -p ~/.claude/commands
-
-# Copy the skill file
 cp orchestrate.md ~/.claude/commands/orchestrate.md
 ```
 
-That's it. The skill is now available as `/orchestrate` in every Claude Code session, in every project.
+The skill is now available as `/orchestrate` in every Claude Code session, in every project.
 
 ### 2. Configure your project (per-project)
 
-Two options:
+**Option A: Let the skill guide you (recommended)**
 
-**Option A: Let the skill guide you (recommended for beginners)**
-
-Open a Claude Code session in your project and run:
 ```
 /orchestrate
 ```
 
-The skill will detect there's no config and ask you 4 friendly questions (no technical jargon) to create one.
+The skill detects there's no config and asks 6 friendly questions (no technical jargon):
+1. **"What's your project?"** — name + one sentence
+2. **"What session types do you need?"** — explained as "work modes"
+3. **"How do you publish?"** — deploy commands or "I don't know yet"
+4. **"Where are your files?"** — tests, plans, docs (or "I don't have any yet")
+5. **"What's your main branch?"** — main/master/develop/demo
+6. **"Anything to verify on startup?"** — optional health checks
 
-**Option B: Create the config manually**
-
-Create `.claude/orchestrate.yml` in your project root:
-
-```yaml
-project:
-  name: "My Project"
-  description: "What your project does in one sentence"
-
-spokes:
-  qa:
-    enabled: true
-    description: "Find bugs and edge cases"
-    docs: "tests/"
-
-  journey:
-    enabled: false  # Enable when you have personas
-
-  feature:
-    enabled: true
-    description: "Implement new features with TDD plans"
-    plans: "docs/plans/"
-
-  dev:
-    enabled: true
-    description: "Quick fixes and improvements"
-
-deploy:
-  build: "npm run build"
-  frontend: "vercel deploy --prod"
-
-verify:
-  - "git branch --show-current"
-  - "git log --oneline -3"
-```
-
-## Session Types
-
-### Control Session (Hub)
-
-The brain. Opens first, closes last. Does NOT implement code directly (delegates that to spokes).
-
-**What it does:**
-1. Loads project context (memory files, handoff, git state)
-2. Presents current state and priorities to you
-3. Generates instruction blocks for spoke sessions
-4. Absorbs spoke reports and re-prioritizes
-5. Updates handoff memory for the next cycle
-
-**When to open:** Start of each work day, or whenever you need to decide what to do next.
-
-### QA Session (Spoke)
-
-Systematic bug hunting. Goes module by module, role by role, testing every edge case.
-
-**What it produces:** A matrix of test cases with scores (pass/fail/UX gap/missing feature) and a prioritized bug backlog.
-
-### Prospect Journey Session (Spoke)
-
-Simulates real prospects evaluating your product. Uses detailed personas with realistic backgrounds, pain points, and time constraints.
-
-**What it produces:** A narrative per persona with scores (1-10), verdict (would they buy?), top frictions, and delights.
-
-### Feature Session (Spoke)
-
-Implements a new feature end-to-end: backend + frontend + tests + deploy. Follows a TDD plan.
-
-**What it produces:** Commits, test results, deploy confirmation.
-
-### Dev Session (Spoke)
-
-Quick fixes, improvements, and polish. No formal plan needed — just a list of things to fix.
-
-**What it produces:** List of what was fixed + deploy confirmation.
-
-### Deploy Session (Spoke)
-
-Everything related to getting your code from your machine to production. Use for:
-- **First-time setup**: configuring SSH keys, cPanel API tokens, Vercel/Netlify CLI, CI/CD pipelines
-- **Deploy pipeline creation**: writing deploy scripts, automating what was manual
-- **Production debugging**: something broke in prod, need to investigate and fix live
-- **Infrastructure changes**: migrating hosting, changing domain, SSL setup
-
-**What it produces:** Working deploy pipeline + documentation of how to use it.
-
-**When NOT to use it:** routine deploys that happen as part of Feature/Dev sessions. Those sessions deploy as part of their normal workflow. The Deploy session is for when deploy *itself* is the problem to solve.
-
-## The Config File
-
-### Full reference
+**Option B: Create config manually**
 
 ```yaml
 # .claude/orchestrate.yml
 
 project:
-  name: "Project Name"
-  description: "One-sentence description"
+  name: "My Project"
+  description: "What it does"
 
-# Spoke types — enable/disable what you need
+branches:
+  base: "main"
+
 spokes:
   qa:
     enabled: true
-    description: "What this spoke does"
-    docs: "path/to/qa/docs/"           # optional
-    template: "path/to/template.md"     # optional
-
   journey:
-    enabled: true
-    description: "Prospect validation"
-    docs: "path/to/docs/"
-    personas: "path/to/personas/"       # optional
-
+    enabled: false  # Enable when you have personas
   feature:
     enabled: true
-    description: "New feature implementation"
-    plans: "path/to/plans/"             # optional
-
   dev:
     enabled: true
-    description: "Quick fixes and improvements"
+  deploy:
+    enabled: false  # Enable when you need hosting setup
 
-# Deploy commands (all optional)
 deploy:
-  build: "command to build"
-  frontend: "command to deploy frontend"
-  backend: "command to deploy backend with {file} placeholder"
-  restart: "command to restart server"
+  build: "npm run build"
+  frontend: ""
+  backend: ""
+  restart: ""
 
-# Verification commands (spoke runs these on startup)
+hosting:
+  credentials: ""  # e.g., "data/deploy_ssh.txt"
+  type: ""         # "ssh", "cpanel", "vercel", etc.
+
 verify:
   - "git branch --show-current"
-  - "ls some/critical/file"
+  - "git log --oneline -3"
 
-# Project-specific gotchas (included in spoke blocks)
-gotchas:
-  - "Always do X before Y"
-  - "Never do Z because..."
-
-# Roles in your app (used for QA and Journey context)
-roles:
-  - admin: "Description of admin role"
-  - user: "Description of user role"
+gotchas: []
+roles: []
 ```
 
-### Minimal config
+## Session Types
 
-```yaml
-project:
-  name: "My App"
-  description: "A web app"
+| Session | What it does | What it produces | Persistent across runs? |
+|---|---|---|---|
+| **Control** (Hub) | Decides, designs, coordinates, reviews | Instruction blocks + handoff | Yes — tracks all spoke states |
+| **QA** (Spoke) | Hunts bugs module × role × case | Test matrix + bug backlog | Yes — compares findings across runs |
+| **Journey** (Spoke) | Simulates prospects evaluating demo | Narrative + scores + verdict | Yes — compares scores across rounds |
+| **Feature** (Spoke) | Implements new functionality E2E | Commits + tests + deploy | Yes — knows the codebase deeply |
+| **Dev** (Spoke) | Quick fixes and improvements | Fix list + deploy | Yes — knows prior fixes |
+| **Deploy** (Spoke) | Sets up hosting, pipelines, debug prod | Working pipeline + docs | Yes — knows the infra |
 
-spokes:
-  feature:
-    enabled: true
-  dev:
-    enabled: true
+### When NOT to open a new spoke
+
+- **Don't open a new QA session** if you have one that already ran QA for this project — reuse it, it has context
+- **Don't open a new Feature session** for the same area of code — the existing one knows the codebase better
+- **Do open a new session** only when starting a genuinely different type of work with no prior context
+
+## Smart block generation
+
+The Control Session adapts blocks based on whether a spoke is new or returning:
+
+| Scenario | Block content |
+|---|---|
+| **New spoke** (never used) | Full context: project description, verification, task, files, rules |
+| **Returning spoke** (same type) | Short diff: "You already did X. Since then Y changed. Re-run with focus on Z." |
+| **Wrong spoke** (type mismatch) | Warning with consequences + recommendation to open correct session |
+
+The Control **always asks** before generating: *"New session or the one that already ran [type]?"*
+
+## Communication flow
+
+```
+CONTROL → SPOKE:  user copies instruction block (1 time per spoke)
+SPOKE → CONTROL:  spoke writes memory/spoke_report_{type}.md
+                   + commits work to its branch
+                   user says "absorb reports" in Control
+                   Control reads memory + git branch automatically
+                   ZERO copy-paste on return
 ```
 
-That's enough to start. Add more spokes and config as your project grows.
+**After the first connection**, the spoke-to-control channel is automatic. You don't need to copy anything back — just say "absorb reports."
 
 ## Example: Real-world usage
 
-This skill was developed while building **StudentHub**, a student tracking app for Chilean educational organizations. Here's how it was used:
+Built during construction of **StudentHub** (pulsed.cl):
 
 ```
 Day 1 — Control Session:
-  /orchestrate
-  → "Feature C (Comunicaciones redesign) is the priority"
-  → Designed mockups, wrote 13-task TDD plan
-  → Implemented with subagent-driven development
+  /orchestrate → "Comunicaciones redesign is the priority"
+  → Designed mockups with brainstorming skill
+  → Wrote 13-task TDD plan with writing-plans skill
+  → Implemented with subagent-driven-development
   → Deployed to production
 
-Day 1 — Delegated QA Session:
-  → Control generated QA instruction block
-  → QA session found 4 critical bugs, 4 important, 8 UX gaps
+Day 1 — QA Session (1st run):
+  → Found 4 critical bugs, 4 important, 8 UX gaps
   → Fixed and redeployed
 
-Day 1 — Delegated Prospect Journey:
-  → Control generated Journey instruction block with 3 personas
-  → Journey session scored: Director 7/10, Tutor 7.5/10, Assistant 6.5/10
-  → Identified 3 quick wins that would raise scores ~1 point each
+Day 1 — Journey Session (1st run):
+  → 3 personas scored: Director 7/10, Tutor 7.5/10, Assistant 6.5/10
+  → Identified 3 quick wins
 
 Day 2 — Control Session:
-  /orchestrate
-  → Absorbed QA + Journey results
-  → "Quick wins first (1.5h), then Notes feature (2-3h)"
-  → Implemented inline, deployed, re-validated
-```
+  → Absorbed QA + Journey reports (zero copy-paste)
+  → Implemented quick wins + 3 features inline
+  → Score went from 7.0 → 8.8 average
 
-Total: 26 commits, 45 backend tests, 37 frontend tests, 3 personas evaluated, automated deploy pipeline — all coordinated through `/orchestrate`.
+Day 2 — Journey Session (2nd run, SAME session):
+  → Re-validated with same personas
+  → Scores: Director 9.5, Tutor 9.0, Assistant 8.5
+  → Compared vs round 1 with full context
+```
 
 ## FAQ
 
 **Q: Can sessions talk to each other directly?**
-Not directly, but almost. The communication works through **shared memory files + git branches**:
+Not directly, but close. After the initial copy-paste (Control→Spoke), the return communication is automatic via shared memory files + git branches. You just say "absorb reports" in Control.
 
-1. **Control → Spoke**: you copy the initial instruction block (one-time, unavoidable)
-2. **Spoke → Control**: the spoke writes its report to `memory/spoke_report_{type}.md` and commits its work to its branch. When you go back to Control, just say **"absorb reports"** — Control reads the memory file + the git branch automatically. **Zero copy-paste on the return trip.**
-
-The spoke's report includes its branch name. Control uses `git log {branch}` and `git show {branch}:{file}` to read everything the spoke did, without needing to be in the same worktree.
-
-**Q: Do I need all 4 spoke types?**
-No. Start with `feature` + `dev`. Add `qa` when your product is mature enough to test systematically. Add `journey` when you have real or simulated prospects to validate with.
+**Q: Do I need all spoke types?**
+No. Start with `feature` + `dev`. Add `qa` when your product is mature. Add `journey` when you have prospects to validate with. Add `deploy` when you need hosting automation.
 
 **Q: Can I run multiple spokes in parallel?**
-Yes, as long as they don't modify the same files. QA + Journey can run in parallel (both are read-only). Two Feature sessions modifying the same codebase will cause merge conflicts.
+Yes, if they don't modify the same files. QA + Journey can run in parallel (both read-only). Two Feature sessions on the same code will cause merge conflicts.
 
-**Q: What if a spoke session gets confused?**
-The instruction block includes verification commands. If they fail, the block tells the spoke exactly what to do (e.g., `git merge demo`). If it's still stuck, the spoke reports BLOCKED and you bring it back to Control.
+**Q: What if I paste the wrong block into a session?**
+The block includes a `SESSION_TYPE` check. If it detects a type mismatch (e.g., QA session receives a Journey block), it shows detailed consequences and recommends opening the correct session instead.
 
-**Q: Does this work with any Claude Code project?**
-Yes. The skill is generic. The config file makes it project-specific. You can use it for a React app, a Python API, a mobile app, a static site — anything.
+**Q: Should I close spoke sessions between runs?**
+No! Keep them open. A QA session that already ran once will be faster and more accurate on the second run because it has context from the first.
+
+**Q: Does this work with any project?**
+Yes. The skill is generic. The config makes it project-specific. Works for React, Python, mobile, static sites — anything with git.
 
 ---
 
@@ -629,374 +408,153 @@ Yes. The skill is generic. The config file makes it project-specific. You can us
 
 # Skill Orchestrate (Espanol)
 
-**Orquestador de Sesiones para Claude Code** — coordiná múltiples sesiones de Claude Code usando un patrón hub-and-spoke.
+**Orquestador de Sesiones para Claude Code** — coordiná múltiples sesiones de Claude Code usando un patrón hub-and-spoke. Las sesiones son **persistentes y reutilizables** — acumulan contexto con el tiempo y mejoran con cada corrida.
 
 ## Qué es esto?
 
-Cuando trabajás en un proyecto real con Claude Code, rápidamente te das cuenta de que una sesión no alcanza. Necesitás:
-- Una **Sesión de Control** para tomar decisiones, diseñar features, y coordinar
+Cuando trabajás en un proyecto real con Claude Code, una sesión no alcanza. Necesitás:
+- Una **Sesión de Control** para decidir, diseñar y coordinar
 - Una **Sesión de QA** para buscar bugs sistemáticamente
-- Una **Sesión de Prospect Journey** para validar tu producto con personas realistas
+- Una **Sesión de Prospect Journey** para validar con prospectos simulados
 - Una **Sesión de Feature** para implementar funcionalidad nueva
 - Una **Sesión de Dev** para fixes rápidos y mejoras
+- Una **Sesión de Deploy** para configurar hosting y automatizar deploys
 
-El problema: **las sesiones no pueden hablar entre sí**. Cada una arranca de cero sin contexto de lo que hicieron las otras.
-
-**Skill Orchestrate** resuelve esto haciendo que la Sesión de Control genere **bloques de texto listos para copiar y pegar** para cada sesión spoke. Vos sos el puente — copiás del Control, pegás en el spoke, y cuando el spoke termina, copiás su reporte de vuelta al Control.
+**Skill Orchestrate** resuelve la comunicación entre sesiones:
+1. **Control → Spoke**: copiás un bloque de instrucciones (1 vez por spoke)
+2. **Spoke → Control**: el spoke escribe su reporte en memory + commitea a su branch. El Control lo lee automáticamente. **Cero copy-paste de vuelta.**
 
 ```
 Abrís Sesión de Control
   → /orchestrate
-  → Control lee el estado del proyecto, te presenta opciones
-  → Elegís: "necesito una sesión de QA"
-  → Control genera un bloque con TODO lo que la sesión QA necesita
+  → Control pregunta: "¿Sesión nueva o la que ya hizo QA?"
+  → Genera bloque adaptado al contexto del spoke
   → Lo copiás
 
-Abrís Sesión de QA
+Abrís Sesión de QA (nueva o existente)
   → Pegás el bloque
-  → La sesión QA trabaja sola (sin preguntas, sin "dónde está X?")
-  → Termina, genera un bloque de reporte
-  → Lo copiás
+  → QA trabaja solo
+  → Al terminar escribe memory/spoke_report_qa.md
+  → Te dice: "Listo. Decile al Control: absorbé los reportes."
 
-Volvés a la Sesión de Control
-  → Pegás el reporte del QA
-  → Control absorbe los resultados, re-prioriza
-  → Control genera el siguiente bloque spoke (Feature, Journey, etc.)
-  → El ciclo continúa
+Volvés al Control
+  → Decís: "absorbé los reportes"
+  → Control lee memory + branch automáticamente
+  → Cero copy-paste
 ```
+
+## Concepto clave: las sesiones son persistentes
+
+**Los spokes NO son descartables.** Se reusan a lo largo del proyecto:
+
+- **QA**: la primera corrida encuentra 8 bugs. La segunda (después de fixes) hace un re-scan focalizado. La tercera es un smoke test pre-launch. Cada vez más rápido y preciso.
+- **Journey**: la primera corrida da scores 6.5-7.5. La segunda (post-fixes) re-valida y compara. La tercera prueba una persona nueva.
+- **Feature**: la primera implementa auth. La segunda agrega OAuth. La tercera agrega MFA. Cada vez conoce mejor el código.
+
+**No cierres tus sesiones spoke** — las vas a necesitar de nuevo.
+
+## Skills complementarias recomendadas
+
+Este skill coordina. Para el trabajo dentro de cada sesión, estas skills mejoran la calidad:
+
+| Skill | Qué hace | Qué spokes beneficia |
+|---|---|---|
+| `superpowers:writing-plans` | Crea planes TDD paso a paso | Feature |
+| `superpowers:subagent-driven-development` | Ejecuta planes con subagents + review | Feature |
+| `superpowers:test-driven-development` | Test primero, código después | Feature + Dev |
+| `superpowers:systematic-debugging` | Análisis de causa raíz antes de arreglar | QA + Dev |
+| `superpowers:brainstorming` | Explora requerimientos antes de implementar | Control |
+| `frontend-design:frontend-design` | UI de alta calidad, no genérica | Feature + Dev |
 
 ## Requisitos
 
-Antes de instalar, verificá que tengas:
-
-| Dependencia | Para qué se necesita | Cómo verificar |
-|---|---|---|
-| **Claude Code** | La herramienta CLI donde corre este skill | `claude --version` |
-| **Git** | Canal de comunicación entre sesiones (branches, logs, diff) | `git --version` |
-| **Un repositorio Git** | Tu proyecto debe ser un repo git (el skill usa branches para trackear trabajo de spokes) | `git status` en tu directorio |
-| **Shell compatible con Bash** | El skill genera comandos bash para verificación y deploy | `bash --version` |
-
-**Opcionales pero muy recomendados:**
-
 | Dependencia | Para qué | Cómo verificar |
 |---|---|---|
-| **GitHub CLI (`gh`)** | Automatiza operaciones de GitHub que sino son manuales (ver abajo) | `gh --version` |
-| **Node.js / Python** | Solo si tu proyecto los usa para build/deploy | `node --version` / `python --version` |
+| **Claude Code** | Donde corre el skill | `claude --version` |
+| **Git** | Comunicación entre sesiones | `git --version` |
+| **Repo Git** | Tu proyecto debe ser un repo | `git status` |
+| **Bash** | Comandos de verificación y deploy | `bash --version` |
 
-**No se necesita:**
-- Base de datos
-- Cuenta cloud
-- API keys pagas (el skill es pura orquestación — no llama APIs de IA)
+**Opcionales**: GitHub CLI (`gh`), acceso al hosting (SSH/cPanel/Vercel), Node.js/Python según tu stack.
 
-### Por qué vale la pena instalar GitHub CLI (`gh`)
+<details>
+<summary><strong>Cómo instalar GitHub CLI</strong></summary>
 
-Sin `gh`, estas tareas requieren abrir el navegador, navegar GitHub, y hacerlas a mano. Con `gh`, pasan en 1 comando desde la terminal:
+```bash
+# Windows: winget install --id GitHub.cli
+# macOS: brew install gh
+# Linux: sudo apt install gh
 
-| Tarea | Sin `gh` (manual) | Con `gh` (automático) |
+gh auth login  # seguir el flujo interactivo
+gh auth status  # verificar
+```
+</details>
+
+<details>
+<summary><strong>Cómo configurar acceso al hosting</strong></summary>
+
+4 opciones — elegí la que matchee tu hosting:
+
+| Opción | Para quién | Comando de deploy |
 |---|---|---|
-| Crear un repo | Abrir GitHub.com → New repo → llenar form → copiar URL | `gh repo create mi-proyecto --public --clone` |
-| Crear un Pull Request | Push branch → abrir GitHub → New PR → llenar → enviar | `gh pr create --title "..." --body "..."` |
-| Ver estado de un PR | Abrir GitHub → buscar PR → ver checks | `gh pr status` |
-| Mergear un PR | Abrir GitHub → click Merge → confirmar | `gh pr merge --squash` |
-| Crear un issue | Abrir GitHub → Issues → New → llenar | `gh issue create --title "..."` |
+| **SSH** | VPS, dedicados | `rsync` + `ssh restart` |
+| **cPanel API** | Shared hosting sin SSH | Script Python con UAPI |
+| **Platform CLI** | Vercel/Netlify/Railway | `vercel deploy --prod` |
+| **CI/CD** | GitHub Actions | `git push` = auto deploy |
 
-**Para este skill en particular**, `gh` permite que:
-- La Control Session pueda **crear PRs automáticamente** al mergear branches de spokes
-- Los spokes puedan **pushear y crear draft PRs** en un solo paso
-- El Control pueda **verificar CI** antes de mergear
-- Todo el flujo se quede en la terminal — sin cambiar al navegador
-
-### Cómo instalar GitHub CLI y autenticarse
-
-#### Paso 1: Instalar `gh`
-
-**Windows:**
-```bash
-winget install --id GitHub.cli
-# o: scoop install gh
-# o: choco install gh
-```
-
-**macOS:**
-```bash
-brew install gh
-```
-
-**Linux (Debian/Ubuntu):**
-```bash
-sudo apt install gh
-```
-
-**Verificar:**
-```bash
-gh --version
-# Debería mostrar: gh version 2.x.x
-```
-
-#### Paso 2: Autenticarse con tu cuenta de GitHub
-
-```bash
-gh auth login
-```
-
-Te va a hacer unas preguntas:
-```
-? What account do you want to log into?
-  > GitHub.com           ← elegí esta
-
-? What is your preferred protocol?
-  > HTTPS                ← recomendado
-
-? Authenticate Git with your GitHub credentials?
-  > Yes
-
-? How would you like to authenticate?
-  > Login with a web browser    ← la más fácil
-```
-
-Si elegís "web browser":
-1. `gh` te muestra un código (ej. `A1B2-C3D4`)
-2. Abre tu navegador en `github.com/login/device`
-3. Pegás el código y hacés click en "Authorize"
-4. Listo — `gh` queda autenticado
-
-Si preferís usar un **token** (para servidores/CI):
-1. Andá a https://github.com/settings/tokens
-2. "Generate new token (classic)"
-3. Seleccioná scopes: `repo`, `workflow`, `read:org`
-4. Copiá el token
-5. Pegalo cuando `gh auth login` lo pida
-
-#### Paso 3: Verificar que funciona
-
-```bash
-gh auth status
-# Debería mostrar:
-# ✓ Logged in to github.com as TU_USUARIO
-
-# Test rápido:
-gh repo view cli/cli
-```
-
-#### Problemas comunes
-
-| Problema | Solución |
-|---|---|
-| `gh: command not found` | Reiniciá la terminal después de instalar |
-| `error: authentication required` | Corré `gh auth login` de nuevo |
-| `error: insufficient scope` | Regenerá el token con scopes `repo` + `workflow` |
-
-### Acceso al hosting (SSH / cPanel API / CLI de plataforma)
-
-Si tu proyecto se deploya en un hosting, darle al skill acceso a tu servidor permite **deploys automáticos end-to-end** — desde un cambio de código hasta producción en vivo, sin abrir el browser ni subir archivos a mano.
-
-#### La escalera de automatización
-
-Cada nivel desbloquea más automatización. Empezá donde estés y subí cuando quieras:
-
-| Nivel | Qué tenés | Qué automatiza el skill | Trabajo manual que queda |
-|---|---|---|---|
-| **0 — Nada** | Sin acceso configurado | Nada — subís archivos a mano | Todo: build, upload, restart |
-| **1 — SSH** | Clave SSH o password al servidor | `rsync` archivos + restart remoto | Nada — 100% automático |
-| **2 — cPanel API** | Token API de cPanel (sin SSH) | Upload via UAPI + restart app | Nada — 100% automático (lo que usamos en StudentHub) |
-| **3 — CLI de plataforma** | Vercel/Netlify/Railway CLI instalado | `vercel deploy --prod` o equivalente | Nada — 1 comando |
-| **4 — CI/CD** | GitHub Actions configurado | Push a branch = auto deploy | Nada — git push es el deploy |
-
-**No necesitás todos.** Elegí el que matchee tu hosting.
-
-#### Opción A: SSH (la más universal)
-
-Si tu hosting te da acceso SSH (VPS, servidores dedicados, algunos shared hosting con cPanel):
-
-**Cómo configurarlo:**
-
-1. Verificá que tu hosting soporte SSH (buscá "SSH Access" o "Terminal" en tu panel)
-2. Generá una clave SSH (si no tenés):
-   ```bash
-   ssh-keygen -t ed25519 -C "deploy-key"
-   ```
-3. Agregá la clave pública a tu servidor:
-   ```bash
-   ssh-copy-id usuario@miservidor.com
-   ```
-4. Guardá las credenciales en tu proyecto (gitignored):
-   ```bash
-   cat > data/deploy_ssh.txt << 'EOF'
-   host=miservidor.com
-   user=deploy
-   key=~/.ssh/id_ed25519
-   remote_path=/var/www/miapp
-   EOF
-   ```
-5. Configurá en `orchestrate.yml`:
-   ```yaml
-   deploy:
-     frontend: "rsync -avz --delete dist/ deploy@miservidor.com:/var/www/miapp/"
-     restart: "ssh deploy@miservidor.com 'sudo systemctl restart miapp'"
-   ```
-
-#### Opción B: cPanel API (hosting compartido sin SSH)
-
-Si tu hosting usa cPanel pero SSH está bloqueado, podés automatizar via la API de cPanel. Es lo que usamos en StudentHub.
-
-**Cómo configurarlo:**
-
-1. Entrá a cPanel (normalmente `tudominio.com:2083`)
-2. Andá a **Seguridad → Administrar Tokens API → Crear**
-3. Copiá el token (no lo vas a volver a ver)
-4. Guardá las credenciales (gitignored):
-   ```bash
-   cat > data/cpanel_credentials.txt << 'EOF'
-   cpanel_host=s550.v2nets.com
-   cpanel_port=2083
-   user=miusuario
-   cpanel_api_token=TU_TOKEN_AQUI
-   remote_path=/home/miusuario/miapp
-   EOF
-   ```
-5. El skill te puede ayudar a crear un `scripts/deploy_cpanel.py` que usa la UAPI para subir archivos y reiniciar la app
-
-#### Opción C: CLI de plataforma (Vercel, Netlify, Railway, Fly.io)
-
-Las plataformas modernas tienen su propio CLI:
-```bash
-# Vercel: npm i -g vercel && vercel login
-# Netlify: npm i -g netlify-cli && netlify login
-# Railway: npm i -g @railway/cli && railway login
-# Fly.io: curl -L https://fly.io/install.sh | sh && fly auth login
-```
-Configurás en `orchestrate.yml`:
-```yaml
-deploy:
-  frontend: "vercel deploy --prod"
-```
-Un comando deploya todo.
-
-#### Opción D: CI/CD (GitHub Actions)
-
-La más automatizada: hacés `git push` y el pipeline se encarga de todo. Configurás un `.github/workflows/deploy.yml` y en `orchestrate.yml` ponés:
-```yaml
-deploy:
-  frontend: "git push origin main"  # push = deploy
-```
-
-#### Recordatorio de seguridad
-
-Sea cual sea el método:
-- **Nunca commitees credenciales a git.** Usá `.gitignore`.
-- **Usá los permisos mínimos necesarios.** Una clave de deploy no necesita acceso admin.
-- **Rotá tokens periódicamente.** Si un token se filtra, revocalo y regeneralo.
-- **El skill guarda paths a archivos de credenciales en la config, no las credenciales mismas.** Tu `orchestrate.yml` dice `data/cpanel_credentials.txt` (seguro de commitear), no el token real.
+Credenciales siempre en archivos gitignored. El config guarda el **path** al archivo, no las credenciales.
+</details>
 
 ## Instalación
 
-### 1. Instalar el skill (una vez, a nivel de usuario)
-
 ```bash
-# Crear el directorio de comandos si no existe
 mkdir -p ~/.claude/commands
-
-# Copiar el archivo del skill
 cp orchestrate.md ~/.claude/commands/orchestrate.md
 ```
 
-Listo. El skill ahora está disponible como `/orchestrate` en cada sesión de Claude Code, en todos tus proyectos.
-
-### 2. Configurar tu proyecto (por proyecto)
-
-**Opción A: Que el skill te guíe (recomendado si no sos muy técnico)**
-
-Abrí una sesión de Claude Code en tu proyecto y escribí:
-```
-/orchestrate
-```
-
-El skill va a detectar que no hay config y te hace 4 preguntas sencillas (sin jerga técnica) para crear una:
-
-1. **"Cómo se llama tu proyecto y qué hace?"** — Solo el nombre y una oración. Ejemplo: "MiTienda — un e-commerce de ropa"
-
-2. **"Qué tipos de sesiones necesitás?"** — Te explica cada tipo como si fuera un "modo de trabajo":
-   - QA = "quiero probar que todo funcione"
-   - Journey = "quiero simular que un cliente prueba mi producto"
-   - Feature = "quiero agregar algo nuevo"
-   - Dev = "quiero arreglar cosas"
-
-3. **"Cómo se publica tu proyecto?"** — Opciones claras: "tengo un script", "uso Vercel", "lo subo por FTP", "no sé todavía"
-
-4. **"Dónde viven los archivos importantes?"** — Tests, planes, docs. Si no tenés, decís "no tengo" y listo.
-
-**Opción B: Crear la config a mano**
-
-Creá `.claude/orchestrate.yml` en la raíz de tu proyecto:
-
-```yaml
-project:
-  name: "Mi Proyecto"
-  description: "Lo que hace mi proyecto"
-
-spokes:
-  qa:
-    enabled: true
-  feature:
-    enabled: true
-  dev:
-    enabled: true
-
-deploy:
-  build: "npm run build"
-```
+Configurar por proyecto: corré `/orchestrate` y respondé 6 preguntas.
 
 ## Tipos de sesión
 
-| Sesión | Qué hace | Cuándo usarla |
+| Sesión | Qué hace | Persistente? |
 |---|---|---|
-| **Control** (Hub) | Decide, diseña, coordina, revisa | Al inicio del día o cuando necesitás decidir qué hacer |
-| **QA** (Spoke) | Busca bugs módulo × rol × caso | Antes de mostrar el producto a alguien |
-| **Journey** (Spoke) | Simula prospectos evaluando la demo | Cuando querés validar si tu producto convence |
-| **Feature** (Spoke) | Implementa algo nuevo de punta a punta | Cuando hay una feature diseñada y priorizada |
-| **Dev** (Spoke) | Arregla bugs y hace mejoras chicas | Cuando hay una lista de fixes conocidos |
-| **Deploy** (Spoke) | Configura hosting, pipeline de deploy, debug de producción | Setup inicial, primer deploy, o cuando algo se rompe en prod |
+| **Control** (Hub) | Decide, diseña, coordina, revisa | Sí — trackea todos los spokes |
+| **QA** (Spoke) | Busca bugs módulo × rol × caso | Sí — compara findings entre corridas |
+| **Journey** (Spoke) | Simula prospectos evaluando la demo | Sí — compara scores entre rondas |
+| **Feature** (Spoke) | Implementa algo nuevo E2E | Sí — conoce el código profundamente |
+| **Dev** (Spoke) | Fixes rápidos y mejoras | Sí — conoce fixes previos |
+| **Deploy** (Spoke) | Setup hosting, pipeline, debug prod | Sí — conoce la infra |
 
-## El ciclo de trabajo
+## Generación inteligente de bloques
 
-```
-Control Session (hub)
-  → Carga contexto, prioriza
-  → Genera bloque para spoke
-                ↓
-          [vos copiás]
-                ↓
-Spoke Session (QA/Journey/Feature/Dev)
-  → Recibe bloque, trabaja solo
-  → Genera reporte al final
-                ↓
-          [vos copiás]
-                ↓
-Control Session (hub)
-  → Absorbe reporte
-  → Re-prioriza
-  → Genera siguiente bloque
-  → ... ciclo continúa
-```
+| Escenario | Qué genera el Control |
+|---|---|
+| **Spoke nuevo** | Bloque completo con todo el contexto |
+| **Spoke que ya corrió** | Bloque corto: "ya hiciste X, desde entonces cambió Y, re-corré con foco en Z" |
+| **Spoke equivocado** | Advertencia con consecuencias + recomendación de abrir sesión correcta |
+
+El Control **siempre pregunta**: "¿sesión nueva o la que ya trabajó?"
+
+## Comunicación
+
+Después de la primera conexión (copy-paste del bloque), el retorno es automático vía memory + git. Solo decís "absorbé los reportes".
 
 ## Preguntas frecuentes
 
-**P: Las sesiones pueden hablar entre sí?**
-No directamente, pero casi. La comunicación funciona via **memory files compartidos + branches de git**:
+**P: Las sesiones hablan entre sí?**
+Casi. Después del copy-paste inicial, el retorno es automático vía memory files compartidos + branches de git. Solo decís "absorbé los reportes" en el Control.
 
-1. **Control → Spoke**: copiás el bloque de instrucciones inicial (1 vez, inevitable)
-2. **Spoke → Control**: el spoke escribe su reporte en `memory/spoke_report_{tipo}.md` y commitea su trabajo a su branch. Cuando volvés al Control, solo decís **"absorbé los reportes"** — Control lee el memory file + la branch del spoke automáticamente. **Cero copy-paste en el viaje de vuelta.**
+**P: Necesito todos los tipos de spoke?**
+No. Empezá con `feature` + `dev`. Agregá `qa` cuando tu producto madure. Agregá `journey` cuando tengas prospectos.
 
-El reporte del spoke incluye el nombre de su branch. Control usa `git log {branch}` y `git show {branch}:{archivo}` para leer todo lo que hizo el spoke, sin necesidad de estar en el mismo worktree.
+**P: Qué pasa si pego el bloque equivocado?**
+El bloque tiene un check `SESSION_TYPE`. Si detecta mismatch, muestra las consecuencias detalladas (commits mezclados, reportes sobreescritos, handoff inconsistente) y recomienda abrir la sesión correcta.
 
-**P: Necesito los 4 tipos de spoke?**
-No. Empezá con `feature` + `dev`. Agregá `qa` cuando tu producto esté lo suficientemente maduro. Agregá `journey` cuando tengas prospectos reales o simulados para validar.
+**P: Debo cerrar los spokes entre corridas?**
+No. Mantené las sesiones abiertas. Un QA que ya corrió una vez será más rápido y preciso la segunda vez porque tiene contexto.
 
 **P: Funciona con cualquier proyecto?**
-Sí. El skill es genérico. La config lo hace específico a tu proyecto. Funciona para una app React, una API Python, una app mobile, un sitio estático — lo que sea.
-
-**P: Qué pasa si un spoke se traba?**
-El bloque de instrucciones incluye comandos de verificación. Si fallan, el bloque dice exactamente qué hacer. Si sigue trabado, el spoke reporta BLOQUEADO y vos lo llevás de vuelta al Control.
+Sí. El skill es genérico. La config lo adapta. Funciona con React, Python, mobile, sitios estáticos — cualquier cosa con git.
 
 ---
 
