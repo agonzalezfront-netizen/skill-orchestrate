@@ -31,12 +31,21 @@ spokes:
     enabled: true
     description: "Quick fixes and improvements"
 
+  deploy:
+    enabled: false
+    description: "Setup hosting, configure deploy pipeline, debug production issues"
+
 # Deploy commands (all optional — fill in what applies)
 deploy:
   build: "npm run build"
   frontend: ""
   backend: ""
   restart: ""
+
+# Hosting credentials file (gitignored, NOT the credentials themselves)
+hosting:
+  credentials: ""  # e.g., "data/deploy_ssh.txt" or "data/cpanel_credentials.txt"
+  type: ""         # "ssh", "cpanel", "vercel", "netlify", "railway", "fly", "github-actions"
 
 # Verification commands (spokes run these on startup)
 verify:

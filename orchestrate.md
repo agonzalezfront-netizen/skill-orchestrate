@@ -335,12 +335,21 @@ spokes:
     enabled: true
     description: "Quick wins, fixes, mejoras chicas"
 
+  deploy:
+    enabled: true
+    description: "Setup de hosting, configurar pipeline de deploy, debugging de producción"
+
 # Comandos de deploy (todos opcionales)
 deploy:
   build: ""
   frontend: ""
   backend: ""
   restart: ""
+
+# Archivo de credenciales del hosting (gitignored — NO las credenciales, sino el PATH al archivo)
+hosting:
+  credentials: ""  # ej: "data/deploy_ssh.txt" o "data/cpanel_credentials.txt"
+  type: ""         # "ssh", "cpanel", "vercel", "netlify", "railway", "fly", "github-actions"
 
 # Comandos de verificación que cada spoke corre al arrancar
 verify:

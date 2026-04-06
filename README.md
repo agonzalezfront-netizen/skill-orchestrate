@@ -14,6 +14,7 @@ When you work on a real project with Claude Code, you quickly realize one sessio
 - A **Prospect Journey Session** to validate your product with realistic personas
 - A **Feature Session** to implement new functionality
 - A **Dev Session** for quick fixes and improvements
+- A **Deploy Session** to set up hosting, automate deploys, and debug production
 
 The problem: **sessions can't talk to each other**. Each one starts fresh with no context about what the others did.
 
@@ -186,6 +187,202 @@ gh repo view cli/cli
 | `error: insufficient scope` | Regenerate token with `repo` + `workflow` scopes |
 | Behind a corporate proxy | `gh auth login --hostname github.mycompany.com` |
 
+### Hosting access (SSH / cPanel API / Platform CLI)
+
+If your project is deployed on a hosting provider, giving the skill access to your hosting enables **fully automated end-to-end deploys** — from code change to live in production, without opening a browser or uploading files manually.
+
+#### The automation ladder
+
+Each level unlocks more automation. Start wherever you are and move up when ready:
+
+| Level | What you have | What the skill can automate | Manual work remaining |
+|---|---|---|---|
+| **0 — Nothing** | No hosting access configured | Nothing — you upload files manually | Everything: build, upload, restart |
+| **1 — SSH access** | SSH key or password to your server | `rsync` files + restart server remotely | Nothing — fully automated |
+| **2 — cPanel API token** | API token from cPanel (no SSH needed) | Upload files via UAPI + restart app | Nothing — fully automated (our approach for StudentHub) |
+| **3 — Platform CLI** | Vercel/Netlify/Railway/Fly CLI installed | `vercel deploy --prod` or equivalent | Nothing — one command |
+| **4 — CI/CD pipeline** | GitHub Actions / GitLab CI configured | Push to branch = auto deploy | Nothing — git push is the deploy |
+
+**You don't need all of these.** Pick the one that matches your hosting. Most projects only need ONE.
+
+#### Option A: SSH access (most hosting providers)
+
+The most universal option. If your hosting gives you SSH access, the skill can deploy with `rsync` + `ssh`:
+
+**How to set it up:**
+
+1. **Check if your hosting supports SSH.** Most VPS (DigitalOcean, Linode, Hetzner), dedicated servers, and some shared hosting (like cPanel-based hosts) do. Look for "SSH Access" or "Terminal" in your hosting panel.
+
+2. **Get your credentials:**
+   - **Host**: your server's IP or domain (e.g., `myserver.com` or `203.0.113.50`)
+   - **User**: your SSH username (e.g., `root`, `deploy`, `myuser`)
+   - **Auth**: either a password or (better) an SSH key pair
+
+3. **Generate an SSH key** (if you don't have one):
+   ```bash
+   ssh-keygen -t ed25519 -C "deploy-key"
+   # Press Enter for default location (~/.ssh/id_ed25519)
+   # Optionally set a passphrase
+   ```
+
+4. **Add the public key to your server:**
+   ```bash
+   ssh-copy-id user@myserver.com
+   # Or manually: copy ~/.ssh/id_ed25519.pub content to
+   # ~/.ssh/authorized_keys on the server
+   ```
+
+5. **Test the connection:**
+   ```bash
+   ssh user@myserver.com "echo 'SSH works!'"
+   ```
+
+6. **Store credentials in your project** (gitignored):
+   ```bash
+   # Create a credentials file (add to .gitignore!)
+   cat > data/deploy_ssh.txt << 'EOF'
+   host=myserver.com
+   user=deploy
+   key=~/.ssh/id_ed25519
+   remote_path=/var/www/myapp
+   EOF
+
+   # Make sure it's gitignored
+   echo "data/*.txt" >> .gitignore
+   ```
+
+7. **Configure in orchestrate.yml:**
+   ```yaml
+   deploy:
+     build: "npm run build"
+     frontend: "rsync -avz --delete dist/ deploy@myserver.com:/var/www/myapp/"
+     restart: "ssh deploy@myserver.com 'sudo systemctl restart myapp'"
+   ```
+
+**What this enables:** spoke sessions can build + deploy + restart in one command chain. No browser, no FTP, no file manager.
+
+#### Option B: cPanel API token (shared hosting without SSH)
+
+If your hosting uses cPanel but SSH is blocked (common with shared hosting), you can still automate deploys via the cPanel UAPI. This is what we used for StudentHub on pulsed.cl.
+
+**How to set it up:**
+
+1. **Log into cPanel** (usually at `yourdomain.com:2083` or via your hosting panel)
+
+2. **Generate an API token:**
+   - Go to **Security** → **Manage API Tokens**
+   - Click **Create**
+   - Name it something descriptive (e.g., `claude-deploy`)
+   - Copy the token — you won't see it again
+
+3. **Find your cPanel details:**
+   - **cPanel host**: the domain in your browser's address bar (e.g., `s550.v2nets.com`)
+   - **cPanel port**: usually `2083` (HTTPS)
+   - **Username**: your cPanel username (visible in the top-right of cPanel)
+   - **App path**: where your app lives on the server (e.g., `/home/myuser/myapp/`)
+
+4. **Store credentials** (gitignored):
+   ```bash
+   cat > data/cpanel_credentials.txt << 'EOF'
+   host=yourdomain.com
+   cpanel_host=s550.v2nets.com
+   cpanel_port=2083
+   user=myuser
+   cpanel_api_token=YOUR_TOKEN_HERE
+   remote_path=/home/myuser/myapp
+   EOF
+   ```
+
+5. **Create a deploy script** (or use ours as a template):
+   The skill can help you create a `scripts/deploy_cpanel.py` that uses the cPanel UAPI to:
+   - Upload files via `Fileman::upload_files`
+   - Create directories via API2 `Fileman::mkdir`
+   - Restart your Python/Node app by touching `tmp/restart.txt`
+
+6. **Configure in orchestrate.yml:**
+   ```yaml
+   deploy:
+     build: "npm run build"
+     frontend: "python scripts/deploy_cpanel.py"
+     backend: "python scripts/deploy_cpanel.py --backend-file {file}"
+     restart: "python scripts/deploy_cpanel.py --restart-only"
+   ```
+
+**Advantage over SSH**: works even when the hosting provider blocks SSH connections. All communication goes through HTTPS to the cPanel API.
+
+#### Option C: Platform CLI (Vercel, Netlify, Railway, Fly.io, etc.)
+
+Modern platforms have their own CLIs that handle everything:
+
+```bash
+# Vercel
+npm i -g vercel && vercel login
+# Deploy: vercel deploy --prod
+
+# Netlify
+npm i -g netlify-cli && netlify login
+# Deploy: netlify deploy --prod
+
+# Railway
+npm i -g @railway/cli && railway login
+# Deploy: railway up
+
+# Fly.io
+curl -L https://fly.io/install.sh | sh && fly auth login
+# Deploy: fly deploy
+```
+
+**Configure in orchestrate.yml:**
+```yaml
+deploy:
+  build: "npm run build"
+  frontend: "vercel deploy --prod"  # or netlify/railway/fly
+```
+
+**Simplest option** if your project is on one of these platforms — one command deploys everything.
+
+#### Option D: CI/CD Pipeline (GitHub Actions)
+
+The most automated: just `git push` and the pipeline handles everything.
+
+**How to set up a basic deploy pipeline:**
+
+1. Create `.github/workflows/deploy.yml`:
+   ```yaml
+   name: Deploy
+   on:
+     push:
+       branches: [main]  # or your base branch
+
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with:
+             node-version: '20'
+         - run: npm ci && npm run build
+         - run: # your deploy command here
+   ```
+
+2. **Configure in orchestrate.yml:**
+   ```yaml
+   deploy:
+     build: ""  # CI handles it
+     frontend: "git push origin main"  # push = deploy
+   ```
+
+**Best for teams**: every merge to main auto-deploys. Spoke sessions just push to their branch, Control merges to main, CI deploys.
+
+#### Security reminder
+
+Whatever method you choose:
+- **Never commit credentials to git.** Use `.gitignore` for credential files.
+- **Use the minimum permissions needed.** A deploy key doesn't need admin access.
+- **Rotate tokens periodically.** If a token leaks, revoke and regenerate.
+- **The skill stores credentials as file paths in the config, not the credentials themselves.** Your `.claude/orchestrate.yml` says `data/cpanel_credentials.txt` (safe to commit), not the actual token (never commit).
+
 ## Installation
 
 ### 1. Install the skill (one-time, user-level)
@@ -287,6 +484,18 @@ Implements a new feature end-to-end: backend + frontend + tests + deploy. Follow
 Quick fixes, improvements, and polish. No formal plan needed — just a list of things to fix.
 
 **What it produces:** List of what was fixed + deploy confirmation.
+
+### Deploy Session (Spoke)
+
+Everything related to getting your code from your machine to production. Use for:
+- **First-time setup**: configuring SSH keys, cPanel API tokens, Vercel/Netlify CLI, CI/CD pipelines
+- **Deploy pipeline creation**: writing deploy scripts, automating what was manual
+- **Production debugging**: something broke in prod, need to investigate and fix live
+- **Infrastructure changes**: migrating hosting, changing domain, SSL setup
+
+**What it produces:** Working deploy pipeline + documentation of how to use it.
+
+**When NOT to use it:** routine deploys that happen as part of Feature/Dev sessions. Those sessions deploy as part of their normal workflow. The Deploy session is for when deploy *itself* is the problem to solve.
 
 ## The Config File
 
@@ -577,6 +786,108 @@ gh repo view cli/cli
 | `error: authentication required` | Corré `gh auth login` de nuevo |
 | `error: insufficient scope` | Regenerá el token con scopes `repo` + `workflow` |
 
+### Acceso al hosting (SSH / cPanel API / CLI de plataforma)
+
+Si tu proyecto se deploya en un hosting, darle al skill acceso a tu servidor permite **deploys automáticos end-to-end** — desde un cambio de código hasta producción en vivo, sin abrir el browser ni subir archivos a mano.
+
+#### La escalera de automatización
+
+Cada nivel desbloquea más automatización. Empezá donde estés y subí cuando quieras:
+
+| Nivel | Qué tenés | Qué automatiza el skill | Trabajo manual que queda |
+|---|---|---|---|
+| **0 — Nada** | Sin acceso configurado | Nada — subís archivos a mano | Todo: build, upload, restart |
+| **1 — SSH** | Clave SSH o password al servidor | `rsync` archivos + restart remoto | Nada — 100% automático |
+| **2 — cPanel API** | Token API de cPanel (sin SSH) | Upload via UAPI + restart app | Nada — 100% automático (lo que usamos en StudentHub) |
+| **3 — CLI de plataforma** | Vercel/Netlify/Railway CLI instalado | `vercel deploy --prod` o equivalente | Nada — 1 comando |
+| **4 — CI/CD** | GitHub Actions configurado | Push a branch = auto deploy | Nada — git push es el deploy |
+
+**No necesitás todos.** Elegí el que matchee tu hosting.
+
+#### Opción A: SSH (la más universal)
+
+Si tu hosting te da acceso SSH (VPS, servidores dedicados, algunos shared hosting con cPanel):
+
+**Cómo configurarlo:**
+
+1. Verificá que tu hosting soporte SSH (buscá "SSH Access" o "Terminal" en tu panel)
+2. Generá una clave SSH (si no tenés):
+   ```bash
+   ssh-keygen -t ed25519 -C "deploy-key"
+   ```
+3. Agregá la clave pública a tu servidor:
+   ```bash
+   ssh-copy-id usuario@miservidor.com
+   ```
+4. Guardá las credenciales en tu proyecto (gitignored):
+   ```bash
+   cat > data/deploy_ssh.txt << 'EOF'
+   host=miservidor.com
+   user=deploy
+   key=~/.ssh/id_ed25519
+   remote_path=/var/www/miapp
+   EOF
+   ```
+5. Configurá en `orchestrate.yml`:
+   ```yaml
+   deploy:
+     frontend: "rsync -avz --delete dist/ deploy@miservidor.com:/var/www/miapp/"
+     restart: "ssh deploy@miservidor.com 'sudo systemctl restart miapp'"
+   ```
+
+#### Opción B: cPanel API (hosting compartido sin SSH)
+
+Si tu hosting usa cPanel pero SSH está bloqueado, podés automatizar via la API de cPanel. Es lo que usamos en StudentHub.
+
+**Cómo configurarlo:**
+
+1. Entrá a cPanel (normalmente `tudominio.com:2083`)
+2. Andá a **Seguridad → Administrar Tokens API → Crear**
+3. Copiá el token (no lo vas a volver a ver)
+4. Guardá las credenciales (gitignored):
+   ```bash
+   cat > data/cpanel_credentials.txt << 'EOF'
+   cpanel_host=s550.v2nets.com
+   cpanel_port=2083
+   user=miusuario
+   cpanel_api_token=TU_TOKEN_AQUI
+   remote_path=/home/miusuario/miapp
+   EOF
+   ```
+5. El skill te puede ayudar a crear un `scripts/deploy_cpanel.py` que usa la UAPI para subir archivos y reiniciar la app
+
+#### Opción C: CLI de plataforma (Vercel, Netlify, Railway, Fly.io)
+
+Las plataformas modernas tienen su propio CLI:
+```bash
+# Vercel: npm i -g vercel && vercel login
+# Netlify: npm i -g netlify-cli && netlify login
+# Railway: npm i -g @railway/cli && railway login
+# Fly.io: curl -L https://fly.io/install.sh | sh && fly auth login
+```
+Configurás en `orchestrate.yml`:
+```yaml
+deploy:
+  frontend: "vercel deploy --prod"
+```
+Un comando deploya todo.
+
+#### Opción D: CI/CD (GitHub Actions)
+
+La más automatizada: hacés `git push` y el pipeline se encarga de todo. Configurás un `.github/workflows/deploy.yml` y en `orchestrate.yml` ponés:
+```yaml
+deploy:
+  frontend: "git push origin main"  # push = deploy
+```
+
+#### Recordatorio de seguridad
+
+Sea cual sea el método:
+- **Nunca commitees credenciales a git.** Usá `.gitignore`.
+- **Usá los permisos mínimos necesarios.** Una clave de deploy no necesita acceso admin.
+- **Rotá tokens periódicamente.** Si un token se filtra, revocalo y regeneralo.
+- **El skill guarda paths a archivos de credenciales en la config, no las credenciales mismas.** Tu `orchestrate.yml` dice `data/cpanel_credentials.txt` (seguro de commitear), no el token real.
+
 ## Instalación
 
 ### 1. Instalar el skill (una vez, a nivel de usuario)
@@ -644,6 +955,7 @@ deploy:
 | **Journey** (Spoke) | Simula prospectos evaluando la demo | Cuando querés validar si tu producto convence |
 | **Feature** (Spoke) | Implementa algo nuevo de punta a punta | Cuando hay una feature diseñada y priorizada |
 | **Dev** (Spoke) | Arregla bugs y hace mejoras chicas | Cuando hay una lista de fixes conocidos |
+| **Deploy** (Spoke) | Configura hosting, pipeline de deploy, debug de producción | Setup inicial, primer deploy, o cuando algo se rompe en prod |
 
 ## El ciclo de trabajo
 
