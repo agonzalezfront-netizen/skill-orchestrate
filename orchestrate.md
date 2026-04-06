@@ -302,6 +302,24 @@ Cuando el usuario decide qué sesión spoke abrir, generá el bloque copy-paste.
 
 **IMPORTANTE**: El bloque debe incluir instrucciones para que el spoke escriba su reporte en memory al terminar (NO pedirle al usuario que copie de vuelta).
 
+**Contexto del producto en cada bloque**: Si `product` está definido en el config,
+incluir en la sección "Tu contexto" del bloque:
+- Lista de módulos con descripción + URL + roles que lo ven
+- Cuentas de test con login URL + nombre
+- Escala de datos de demo
+
+Esto permite que el spoke:
+- **QA**: sepa qué módulos testear y cómo loguearse como cada rol
+- **Journey**: sepa qué features existen para guiar a cada persona
+- **Feature**: sepa qué módulos existen para no duplicar
+- **Dev**: sepa dónde está cada cosa para aplicar fixes
+- **Deploy**: sepa qué archivos y comandos de build/deploy hay
+
+Si `product` NO está definido, el bloque solo incluye lo que haya en
+`project.description`. Pero recomendar al usuario que llene `product`
+si va a correr QA o Journey ("Para que el QA sepa qué testear, te
+recomiendo llenar la sección product de tu orchestrate.yml").
+
 Estructura del bloque:
 
 ```markdown
@@ -547,7 +565,35 @@ spokes:
     enabled: true
     description: "Setup de hosting, configurar pipeline de deploy, debugging de producción"
 
-# Comandos de deploy (todos opcionales)
+# ─── Contexto del producto ───
+# Esta sección le da a TODOS los spokes el contexto necesario para entender
+# qué hace la app, qué módulos tiene, qué roles existen, y cómo loguearse
+# para probar. SIN esta sección, cada spoke necesita leer N archivos dispersos
+# para entender el producto. CON esta sección, el Control incluye todo en
+# el bloque generado y el spoke arranca inmediato.
+
+product:
+  # Módulos/pantallas de la app — qué existe y qué hace
+  modules:
+    - name: ""           # nombre del módulo (ej: "Dashboard")
+      description: ""    # 1 oración de qué hace
+      url: ""           # ruta en la app (ej: "/dashboard")
+      roles: []         # qué roles lo ven (ej: ["tutor", "ayudante"])
+
+  # Cuentas de test / demo para probar la app
+  # El QA y Journey las usan para loguearse como cada rol
+  test_accounts:
+    - role: ""          # nombre del rol (ej: "director")
+      login: ""         # comando o URL para loguearse (ej: "/auth/demo-login?role=director")
+      name: ""          # nombre que aparece en la app después del login
+      description: ""   # contexto del rol en 1 oración
+
+  # Datos de demo — qué data tiene la app para testing
+  demo_data:
+    description: ""     # cómo se generó la data (ej: "scripts/generate_demo_data.py")
+    scale: ""          # volumen (ej: "10 cursos, 300 alumnos, 5 tutores")
+
+# ─── Comandos de deploy ───
 deploy:
   build: ""
   frontend: ""
@@ -556,8 +602,8 @@ deploy:
 
 # Archivo de credenciales del hosting (gitignored — NO las credenciales, sino el PATH al archivo)
 hosting:
-  credentials: ""  # ej: "data/deploy_ssh.txt" o "data/cpanel_credentials.txt"
-  type: ""         # "ssh", "cpanel", "vercel", "netlify", "railway", "fly", "github-actions"
+  credentials: ""
+  type: ""
 
 # Comandos de verificación que cada spoke corre al arrancar
 verify:

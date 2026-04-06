@@ -35,6 +35,30 @@ spokes:
     enabled: false
     description: "Setup hosting, configure deploy pipeline, debug production issues"
 
+# Product context — teaches spokes about your app
+# Fill this in for better QA and Journey sessions
+product:
+  modules:
+    - name: "Dashboard"
+      description: "Main view with analytics and KPIs"
+      url: "/dashboard"
+      roles: ["admin", "user"]
+    # Add more modules as your app grows
+
+  test_accounts:
+    - role: "admin"
+      login: "/auth/demo-login?role=admin"
+      name: "Demo Admin"
+      description: "Full access"
+    - role: "user"
+      login: "/auth/demo-login?role=user"
+      name: "Demo User"
+      description: "Regular user access"
+
+  demo_data:
+    description: "How your demo data was generated"
+    scale: "10 items, 5 users"
+
 # Deploy commands (all optional — fill in what applies)
 deploy:
   build: "npm run build"
