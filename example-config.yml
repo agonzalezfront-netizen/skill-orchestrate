@@ -1,0 +1,45 @@
+# Example .claude/orchestrate.yml for a generic web project
+# Copy this to your project's .claude/orchestrate.yml and customize
+
+project:
+  name: "My Project"
+  description: "What your project does in one sentence"
+
+# Spoke types — enable/disable what you need
+spokes:
+  qa:
+    enabled: true
+    description: "Find bugs and edge cases"
+    docs: "tests/"
+
+  journey:
+    enabled: false
+    description: "Prospect validation (enable when you have personas)"
+    personas: "docs/personas/"
+
+  feature:
+    enabled: true
+    description: "Implement new features with TDD plans"
+    plans: "docs/plans/"
+
+  dev:
+    enabled: true
+    description: "Quick fixes and improvements"
+
+# Deploy commands (all optional — fill in what applies)
+deploy:
+  build: "npm run build"
+  frontend: ""
+  backend: ""
+  restart: ""
+
+# Verification commands (spokes run these on startup)
+verify:
+  - "git branch --show-current"
+  - "git log --oneline -3"
+
+# Project-specific warnings (included in spoke instruction blocks)
+gotchas: []
+
+# Roles in your app (used for QA and Journey context)
+roles: []
