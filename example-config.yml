@@ -5,6 +5,11 @@ project:
   name: "My Project"
   description: "What your project does in one sentence"
 
+# Base branch — where spoke work gets merged into
+# Also the branch new work branches are created from
+branches:
+  base: "main"  # or "master", "develop", "demo", etc.
+
 # Spoke types — enable/disable what you need
 spokes:
   qa:

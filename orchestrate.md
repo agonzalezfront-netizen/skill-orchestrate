@@ -85,6 +85,43 @@ Si no tenés nada de esto todavía, decí "no tengo" y lo vamos
 creando a medida que lo necesitemos.
 ```
 
+**Pregunta 5 — Rama principal**
+```
+¿Cuál es la rama principal de tu proyecto?
+
+Es la rama donde vive el código "oficial" — la versión que se publica
+o la que todos usan como punto de partida para trabajar.
+
+Ejemplos comunes:
+• "main" — la más común en proyectos nuevos
+• "master" — proyectos más antiguos
+• "develop" — si usás un flujo con rama de desarrollo separada
+• "demo" — si tenés una rama especial para demos
+
+¿Por qué importa? Cuando una sesión de trabajo (QA, Feature, etc.)
+termina, su trabajo se integra a esta rama. También es desde donde
+se crean las nuevas ramas de trabajo.
+
+Si no estás seguro, probablemente es "main". Podés verificar con:
+  git branch
+La rama con el asterisco (*) es en la que estás ahora.
+```
+
+**Pregunta 6 — Verificación automática** (opcional, avanzada)
+```
+¿Hay algo que siempre debería verificar antes de empezar a trabajar?
+
+Esto es opcional. Son comandos que cada sesión corre al arrancar para
+asegurarse de que todo está en orden. Ejemplos:
+
+• "Que exista el archivo de credenciales" → ls data/secrets.txt
+• "Que el servidor responda" → curl -s https://miapp.com | head
+• "Que los tests pasen" → npm test
+
+Si no se te ocurre nada, saltá esta pregunta — siempre se pueden
+agregar después.
+```
+
 Con las respuestas, generá `.claude/orchestrate.yml` y mostráselo al usuario para confirmar antes de guardarlo.
 
 ### Modo 2: Config existe (`.claude/orchestrate.yml` encontrado)
@@ -270,6 +307,11 @@ project:
   name: "Nombre del proyecto"
   description: "Descripción corta de qué hace"
 
+# Rama principal — a donde se mergean los spokes al terminar
+# También es la base desde donde se crean nuevas ramas de trabajo
+branches:
+  base: "main"  # o "master", "develop", "demo", etc.
+
 # Tipos de sesiones spoke disponibles
 # Poné enabled: false para desactivar un tipo sin borrarlo
 spokes:
@@ -311,6 +353,16 @@ gotchas: []
 # Roles de la app (para QA y Journey)
 roles: []
 ```
+
+### Cómo el skill usa `branches.base`
+
+1. **Al generar bloques spoke**: el bloque incluye `git diff {base}..HEAD --stat` en las instrucciones de reporte, para que el spoke sepa qué cambió respecto a la rama principal.
+
+2. **Al absorber reportes**: Control corre `git diff {base}..{spoke_branch} --stat` para ver el diff completo del spoke.
+
+3. **Al mergear**: Control pregunta "¿mergeo {spoke_branch} a {base}?" y ejecuta `git merge {spoke_branch}` desde la rama base.
+
+4. **Si no está configurado**: el skill intenta auto-detectar con `git symbolic-ref refs/remotes/origin/HEAD` o busca `main` / `master` / `develop` en ese orden. Si no encuentra ninguna, pregunta al usuario.
 
 ## Comunicación entre sesiones — resumen
 
