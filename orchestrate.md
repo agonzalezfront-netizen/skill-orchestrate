@@ -440,6 +440,63 @@ SPOKE → CONTROL:  spoke escribe memory/spoke_report_{tipo}.md
 2. Git branches — las ramas de cada spoke son visibles desde cualquier worktree via `git log {branch}`
 3. `git show {branch}:{path}` — Control lee archivos de un spoke sin estar en su worktree
 
+## Generación inteligente de bloques spoke
+
+El Control Session DEBE adaptar los bloques según el estado real de cada sesión spoke. No todos los bloques son iguales — hay 3 escenarios:
+
+### Escenario 1: Sesión spoke NUEVA (nunca usada)
+Bloque completo con todo el contexto: qué es el proyecto, qué hacer, verificación, etc. El spoke no sabe nada — hay que darle todo.
+
+### Escenario 2: Sesión spoke que YA CORRIÓ este tipo antes
+El spoke ya tiene contexto del trabajo anterior. El bloque debe ser MÁS CORTO y decir:
+- "Ya corriste un [tipo] antes en esta sesión con estos resultados: [resumen]"
+- "Desde entonces se hicieron estos cambios: [lista de fixes/features]"
+- "Re-corré el [tipo] con foco en lo que cambió, no desde cero"
+- Ejemplo: un Journey que se re-valida después de fixes → "compará ronda 1 vs ronda 2"
+
+### Escenario 3: Sesión spoke que corrió OTRO tipo (error del usuario)
+Detectado por SESSION_TYPE validation. Mostrar consecuencias y recomendar sesión nueva.
+
+### Reglas para el Control al generar bloques
+
+1. **Preguntale al usuario**: "¿Ya tenés una sesión de [tipo] abierta o abrís una nueva?"
+   - Si ya tiene una abierta → generar bloque Escenario 2 (corto, con diff del anterior)
+   - Si abre nueva → generar bloque Escenario 1 (completo)
+
+2. **Incluir siempre qué cambió** desde la última vez que ese spoke corrió. El Control sabe esto porque tiene el handoff + git log. Ejemplo:
+   ```
+   "Desde tu última corrida se shipearon:
+   - fix: CSRF localhost para demo sessions
+   - feat: notas por alumno
+   - feat: export SENCE CSV
+   Re-validá con estos cambios en mente."
+   ```
+
+3. **Nombrar el session file con versión** si es una re-corrida:
+   - Primera vez: `2026-04-06-prospect-journey.md`
+   - Re-corrida: `2026-04-06-prospect-journey-v2.md`
+   Esto evita sobreescribir el resultado anterior.
+
+4. **NUNCA generar un bloque de sesión nueva para una sesión que ya tiene trabajo**. Si el usuario dice "volvé a correr el Journey en la misma sesión", el bloque debe reconocer el trabajo previo y pedir comparación, no empezar de cero como si fuera virgin.
+
+## Errores comunes del usuario y cómo prevenirlos
+
+### Error: pegar bloque de tipo B en sesión de tipo A
+**Prevención**: SESSION_TYPE check al inicio de cada bloque (ya implementado).
+**Consecuencias**: commits mezclados, reportes sobreescritos, handoff inconsistente.
+
+### Error: pedir al Control "pasame el bloque para Session B" cuando Session B ya corrió algo
+**Prevención**: el Control debe preguntar "¿Session B ya corrió antes o es nueva?" y adaptar el bloque.
+**Consecuencia si no se previene**: el spoke recibe instrucciones de "empezá de cero" cuando ya tiene trabajo hecho → confusión, trabajo duplicado, o peor: sobreescribe su propio session file.
+
+### Error: olvidar que una sesión spoke ya tiene contexto
+**Prevención**: el Control debe trackear en el handoff qué spokes corrieron y cuándo. Al generar un bloque, siempre verificar si ese tipo de spoke ya corrió en el proyecto recientemente.
+
+### Error: no distinguir entre "sesión nueva" y "misma sesión que ya trabajó"
+**Prevención**: el Control debe preguntar SIEMPRE antes de generar el bloque:
+> "¿Vas a pegar esto en una sesión nueva o en [la sesión que ya hizo X]?"
+Y generar el bloque apropiado (Escenario 1 o 2).
+
 ## Notas de implementación
 
 - Este skill vive en `~/.claude/commands/orchestrate.md` (user-level, disponible en TODOS los proyectos)
