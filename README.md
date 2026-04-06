@@ -62,17 +62,129 @@ Before installing, make sure you have:
 | **A Git repository** | Your project must be a git repo (the skill uses branches to track spoke work) | `git status` in your project dir |
 | **Bash-compatible shell** | The skill generates bash commands for verification and deploy | `bash --version` |
 
-**Optional but recommended:**
+**Optional but highly recommended:**
 
 | Dependency | Why | How to check |
 |---|---|---|
-| **GitHub CLI (`gh`)** | For creating PRs from spoke branches | `gh --version` |
+| **GitHub CLI (`gh`)** | Automates GitHub operations that would be manual otherwise (see below) | `gh --version` |
 | **Node.js / Python** | Only if your project uses them for build/deploy | `node --version` / `python --version` |
 
 **Not required:**
 - No database
 - No cloud account
 - No paid API keys (the skill itself is pure orchestration — it doesn't call any AI APIs)
+
+### Why GitHub CLI (`gh`) is worth installing
+
+Without `gh`, these tasks require you to open the browser, navigate GitHub, and do them manually. With `gh`, they happen in 1 command from the terminal:
+
+| Task | Without `gh` (manual) | With `gh` (automated) |
+|---|---|---|
+| Create a new repo | Open GitHub.com → New repo → fill form → copy URL → git remote add | `gh repo create my-project --public --clone` |
+| Create a Pull Request | Push branch → open GitHub → New PR → fill title/body → submit | `gh pr create --title "..." --body "..."` |
+| View PR status/checks | Open GitHub → find PR → check status | `gh pr status` |
+| Merge a PR | Open GitHub → click Merge → confirm | `gh pr merge --squash` |
+| Create an issue | Open GitHub → Issues → New → fill form | `gh issue create --title "..."` |
+| View repo info | Open GitHub → navigate | `gh repo view` |
+| Push spoke branches | Works with plain `git push` | Same, but `gh` adds PR creation on top |
+
+**For this skill specifically**, `gh` enables:
+- Control Session can **create PRs automatically** when merging spoke branches (instead of direct merge)
+- Spoke sessions can **push their branches** and create draft PRs in one step
+- Control can **check CI status** of spoke branches before merging
+- The whole flow stays in the terminal — no browser context-switching
+
+### How to install GitHub CLI and authenticate
+
+#### Step 1: Install `gh`
+
+**Windows:**
+```bash
+# Using winget (Windows 10/11)
+winget install --id GitHub.cli
+
+# Or using scoop
+scoop install gh
+
+# Or using chocolatey
+choco install gh
+```
+
+**macOS:**
+```bash
+brew install gh
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install gh
+# Or: sudo snap install gh
+```
+
+**Verify installation:**
+```bash
+gh --version
+# Should show: gh version 2.x.x
+```
+
+#### Step 2: Authenticate with your GitHub account
+
+```bash
+gh auth login
+```
+
+This starts an interactive flow:
+```
+? What account do you want to log into?
+  > GitHub.com
+  > GitHub Enterprise Server
+
+? What is your preferred protocol for Git operations on this host?
+  > HTTPS    ← recommended for simplicity
+  > SSH
+
+? Authenticate Git with your GitHub credentials?
+  > Yes
+
+? How would you like to authenticate GitHub CLI?
+  > Login with a web browser    ← easiest option
+  > Paste an authentication token
+```
+
+**Option A — Login with web browser (easiest):**
+1. `gh` shows you a one-time code (e.g., `A1B2-C3D4`)
+2. Opens your browser to `github.com/login/device`
+3. You paste the code and click "Authorize"
+4. Done — `gh` is now authenticated
+
+**Option B — Personal Access Token (for servers/CI):**
+1. Go to https://github.com/settings/tokens
+2. Click "Generate new token (classic)"
+3. Select scopes: `repo`, `workflow`, `read:org`
+4. Copy the token
+5. Paste it when `gh auth login` asks
+
+#### Step 3: Verify it works
+
+```bash
+gh auth status
+# Should show:
+# ✓ Logged in to github.com as YOUR_USERNAME
+# ✓ Git operations protocol: https
+# ✓ Token: gho_****
+
+# Quick test — view any public repo:
+gh repo view cli/cli
+```
+
+#### Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `gh: command not found` | Restart your terminal after installing |
+| `error: authentication required` | Run `gh auth login` again |
+| `error: insufficient scope` | Regenerate token with `repo` + `workflow` scopes |
+| Behind a corporate proxy | `gh auth login --hostname github.mycompany.com` |
 
 ## Installation
 
@@ -355,17 +467,115 @@ Antes de instalar, verificá que tengas:
 | **Un repositorio Git** | Tu proyecto debe ser un repo git (el skill usa branches para trackear trabajo de spokes) | `git status` en tu directorio |
 | **Shell compatible con Bash** | El skill genera comandos bash para verificación y deploy | `bash --version` |
 
-**Opcionales pero recomendados:**
+**Opcionales pero muy recomendados:**
 
 | Dependencia | Para qué | Cómo verificar |
 |---|---|---|
-| **GitHub CLI (`gh`)** | Para crear PRs desde branches de spokes | `gh --version` |
+| **GitHub CLI (`gh`)** | Automatiza operaciones de GitHub que sino son manuales (ver abajo) | `gh --version` |
 | **Node.js / Python** | Solo si tu proyecto los usa para build/deploy | `node --version` / `python --version` |
 
 **No se necesita:**
 - Base de datos
 - Cuenta cloud
 - API keys pagas (el skill es pura orquestación — no llama APIs de IA)
+
+### Por qué vale la pena instalar GitHub CLI (`gh`)
+
+Sin `gh`, estas tareas requieren abrir el navegador, navegar GitHub, y hacerlas a mano. Con `gh`, pasan en 1 comando desde la terminal:
+
+| Tarea | Sin `gh` (manual) | Con `gh` (automático) |
+|---|---|---|
+| Crear un repo | Abrir GitHub.com → New repo → llenar form → copiar URL | `gh repo create mi-proyecto --public --clone` |
+| Crear un Pull Request | Push branch → abrir GitHub → New PR → llenar → enviar | `gh pr create --title "..." --body "..."` |
+| Ver estado de un PR | Abrir GitHub → buscar PR → ver checks | `gh pr status` |
+| Mergear un PR | Abrir GitHub → click Merge → confirmar | `gh pr merge --squash` |
+| Crear un issue | Abrir GitHub → Issues → New → llenar | `gh issue create --title "..."` |
+
+**Para este skill en particular**, `gh` permite que:
+- La Control Session pueda **crear PRs automáticamente** al mergear branches de spokes
+- Los spokes puedan **pushear y crear draft PRs** en un solo paso
+- El Control pueda **verificar CI** antes de mergear
+- Todo el flujo se quede en la terminal — sin cambiar al navegador
+
+### Cómo instalar GitHub CLI y autenticarse
+
+#### Paso 1: Instalar `gh`
+
+**Windows:**
+```bash
+winget install --id GitHub.cli
+# o: scoop install gh
+# o: choco install gh
+```
+
+**macOS:**
+```bash
+brew install gh
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install gh
+```
+
+**Verificar:**
+```bash
+gh --version
+# Debería mostrar: gh version 2.x.x
+```
+
+#### Paso 2: Autenticarse con tu cuenta de GitHub
+
+```bash
+gh auth login
+```
+
+Te va a hacer unas preguntas:
+```
+? What account do you want to log into?
+  > GitHub.com           ← elegí esta
+
+? What is your preferred protocol?
+  > HTTPS                ← recomendado
+
+? Authenticate Git with your GitHub credentials?
+  > Yes
+
+? How would you like to authenticate?
+  > Login with a web browser    ← la más fácil
+```
+
+Si elegís "web browser":
+1. `gh` te muestra un código (ej. `A1B2-C3D4`)
+2. Abre tu navegador en `github.com/login/device`
+3. Pegás el código y hacés click en "Authorize"
+4. Listo — `gh` queda autenticado
+
+Si preferís usar un **token** (para servidores/CI):
+1. Andá a https://github.com/settings/tokens
+2. "Generate new token (classic)"
+3. Seleccioná scopes: `repo`, `workflow`, `read:org`
+4. Copiá el token
+5. Pegalo cuando `gh auth login` lo pida
+
+#### Paso 3: Verificar que funciona
+
+```bash
+gh auth status
+# Debería mostrar:
+# ✓ Logged in to github.com as TU_USUARIO
+
+# Test rápido:
+gh repo view cli/cli
+```
+
+#### Problemas comunes
+
+| Problema | Solución |
+|---|---|
+| `gh: command not found` | Reiniciá la terminal después de instalar |
+| `error: authentication required` | Corré `gh auth login` de nuevo |
+| `error: insufficient scope` | Regenerá el token con scopes `repo` + `workflow` |
 
 ## Instalación
 
