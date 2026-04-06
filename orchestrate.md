@@ -185,8 +185,38 @@ Mostrá al usuario un resumen ejecutivo:
 ## Recomendación
 {qué haría yo primero y por qué}
 
+## ⚠️ Validación pendiente
+{si hubo features/fixes shipeados desde la última Session A+B, mostrar:}
+"Se shipearon N cambios desde la última validación. Recomiendo correr
+Session A (QA focalizado en lo nuevo) + Session B (Journey re-validación)
+antes de seguir con features nuevas."
+
 ¿Qué querés hacer?
 ```
+
+#### Regla de re-validación obligatoria
+
+Después de cada batch de features/fixes deployados, el Control Session DEBE
+recomendar una ronda de re-validación antes de seguir con features nuevas.
+
+El ciclo correcto es:
+```
+Implementar features → Deploy → Session A (QA) → Fix bugs → Session B (Journey) → Confirmar scores → Siguiente batch
+```
+
+NO es correcto:
+```
+Implementar features → Deploy → Implementar más features → Deploy → ... → QA al final
+```
+
+**Por qué**: cada feature puede introducir regresiones en las anteriores. Si
+acumulás 5 features sin validar, encontrar cuál rompió qué es mucho más difícil.
+Además, los scores estimados del handoff son PROYECCIONES — solo Session B
+los confirma con datos reales.
+
+**Cuándo omitir la re-validación**: solo si los cambios son puramente de
+infraestructura (deploy scripts, config, docs) que no afectan la UI ni el
+comportamiento del producto.
 
 #### Paso 4: Generar bloques para spoke sessions
 
