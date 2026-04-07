@@ -557,12 +557,53 @@ casos, pero siempre hay cosas que solo un humano nota:
    > 'Copiar issues' y pegame el resultado acá."
 
 **Cuándo re-generar el checklist:**
-- Después de cada batch de features/fixes (los pasos pueden haber cambiado)
+- Después de cada batch de fixes (checklist nuevo con solo los fixes para verificar)
 - Cuando se agrega un módulo nuevo al config
 - Cuando el usuario pide "actualizá el checklist"
 
 **El checklist NO reemplaza Session A ni B** — las complementa. Es la capa
 de validación humana que cubre lo que la IA no puede ver.
+
+### Flujo iterativo de revisión manual
+
+La revisión manual NO es un evento único. Es un ciclo:
+
+```
+1. Control genera checklist (fixes + pendientes + no revisados)
+2. Usuario revisa, marca pass/issue en cada paso
+3. Usuario pega issues de vuelta en el Control ("Copiar issues")
+4. Control triagea: qué se arregla ahora, qué se posterga, qué es aceptable
+5. Control arregla los fixes (inline o spoke)
+6. Control genera NUEVO checklist solo con los fixes aplicados
+7. Usuario revisa solo los fixes nuevos
+8. Repetir hasta que el usuario diga "está bien" o "lo pausamos"
+```
+
+**Reglas del flujo iterativo:**
+
+1. **Cada checklist es más chico que el anterior.** El primero tiene 28 pasos.
+   El segundo tiene solo los fixes del primero. El tercero solo los fixes
+   del segundo. Converge a cero.
+
+2. **El Control siempre ofrece 3 opciones** después de recibir issues:
+   > "Encontraste N issues. ¿Qué hacemos?
+   > (A) Arreglo los N ahora y te genero un nuevo checklist con solo esos fixes
+   > (B) Arreglo los criticos ahora y dejamos el resto para otra sesion
+   > (C) Los anoto en el backlog y seguimos con otra cosa"
+
+3. **Los issues "aceptables"** (que el usuario marcó como pass pese a ser
+   limitaciones conocidas, como "data demo uniforme") se registran en el
+   handoff como "aceptados" para no volver a preguntar en la próxima ronda.
+
+4. **El usuario puede pausar en cualquier momento** diciendo "está bien por
+   ahora" o "lo dejamos acá". El Control guarda el estado del checklist
+   en el handoff y la próxima sesión puede retomar donde quedó.
+
+5. **Los checklists se versionan** como archivos separados:
+   - `demo-checklist.html` — checklist principal completo
+   - `demo-checklist-fixes.html` — solo fixes a verificar
+   - `demo-checklist-fixes-v2.html` — segunda ronda de fixes
+   Cada uno tiene su propio localStorage key para no pisarse.
 
 #### Paso 6: Cierre de Control Session (obligatorio antes de cerrar o pausar)
 
