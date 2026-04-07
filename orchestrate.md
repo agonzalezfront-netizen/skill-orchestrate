@@ -556,27 +556,27 @@ casos, pero siempre hay cosas que solo un humano nota:
    - Si es una ACTUALIZACIÓN del mismo archivo: decir explícitamente que se actualizó el mismo y que recargue
    - SIEMPRE incluir el link clickeable
 
+   **Dar SIEMPRE un solo link** — el `file:///` que el usuario puede copiar
+   y pegar directo en su browser. Nada de paths relativos, nada de
+   "buscalo en el explorador", nada de 2 links distintos.
+
    **Checklist nuevo:**
-   > "Generé un checklist nuevo:
-   > 📄 `docs/qa/demo-checklist-fixes.html`
-   >
-   > Para abrirlo: buscá el archivo en tu explorador de archivos y ábrelo
-   > con tu browser. O copiá esta ruta en la barra del browser:
-   > `file:///RUTA_COMPLETA_AL_ARCHIVO`
-   >
-   > Tiene N pasos en M secciones. Cuando termines: click 'Copiar issues'
-   > y pegame el resultado acá."
+   > "📄 Checklist de verificación:
+   > ```
+   > file:///RUTA_ABSOLUTA_COMPLETA_AL_ARCHIVO.html
+   > ```
+   > Copiá eso en la barra de tu browser. N pasos en M secciones.
+   > Cuando termines: 'Copiar issues' y pegame acá."
 
    **Actualización del mismo archivo:**
-   > "Actualicé el checklist existente:
-   > 📄 `docs/qa/demo-checklist-fixes.html` (mismo archivo)
-   >
-   > Si lo tenés abierto en el browser: hacé F5 para recargar.
-   > Si lo cerraste: volvé a abrirlo desde el explorador de archivos.
-   > Tus checks anteriores siguen guardados (localStorage)."
+   > "📄 Actualicé el mismo checklist. Si lo tenés abierto: F5.
+   > Si lo cerraste:
+   > ```
+   > file:///RUTA_ABSOLUTA_COMPLETA_AL_ARCHIVO.html
+   > ```
+   > Tus checks anteriores siguen guardados."
 
-   **NUNCA asumir que el usuario tiene el archivo abierto.** Siempre dar
-   la ruta y cómo llegar.
+   **REGLA: un solo link, formato file:///, ruta absoluta.**
 
 **Cuándo re-generar el checklist:**
 - Después de cada batch de fixes (checklist nuevo con solo los fixes para verificar)
