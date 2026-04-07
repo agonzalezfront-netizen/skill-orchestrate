@@ -551,10 +551,32 @@ casos, pero siempre hay cosas que solo un humano nota:
    - **Botón "Copiar issues"** que exporta todos los issues al clipboard formateados para pegar en el Control
    - **Links directos de login** para cada rol (clickeables)
    - **Tags por paso**: verificar (azul), acción (morado), crítico (rojo)
-5. Decirle al usuario:
-   > "Generé un checklist en `docs/qa/demo-checklist.html`. Abrilo en tu
-   > browser, probá cada paso, marcá pass o issue. Cuando termines, click
-   > 'Copiar issues' y pegame el resultado acá."
+5. Decirle al usuario con TODA la info que necesita para abrirlo:
+   - Si es un checklist NUEVO (primer checklist o versión nueva): dar el path completo + cómo abrirlo
+   - Si es una ACTUALIZACIÓN del mismo archivo: decir explícitamente que se actualizó el mismo y que recargue
+   - SIEMPRE incluir el link clickeable
+
+   **Checklist nuevo:**
+   > "Generé un checklist nuevo:
+   > 📄 `docs/qa/demo-checklist-fixes.html`
+   >
+   > Para abrirlo: buscá el archivo en tu explorador de archivos y ábrelo
+   > con tu browser. O copiá esta ruta en la barra del browser:
+   > `file:///RUTA_COMPLETA_AL_ARCHIVO`
+   >
+   > Tiene N pasos en M secciones. Cuando termines: click 'Copiar issues'
+   > y pegame el resultado acá."
+
+   **Actualización del mismo archivo:**
+   > "Actualicé el checklist existente:
+   > 📄 `docs/qa/demo-checklist-fixes.html` (mismo archivo)
+   >
+   > Si lo tenés abierto en el browser: hacé F5 para recargar.
+   > Si lo cerraste: volvé a abrirlo desde el explorador de archivos.
+   > Tus checks anteriores siguen guardados (localStorage)."
+
+   **NUNCA asumir que el usuario tiene el archivo abierto.** Siempre dar
+   la ruta y cómo llegar.
 
 **Cuándo re-generar el checklist:**
 - Después de cada batch de fixes (checklist nuevo con solo los fixes para verificar)
