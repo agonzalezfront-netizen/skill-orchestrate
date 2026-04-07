@@ -122,6 +122,30 @@ Si no se te ocurre nada, saltá esta pregunta — siempre se pueden
 agregar después.
 ```
 
+**Pregunta 7 — Revisión manual personal** (solo si habilitó Journey)
+```
+¿Cuándo te gustaría revisar la app personalmente?
+
+Además de las pruebas automáticas (QA y Journey que yo corro),
+hay cosas que solo vos podés notar probando la app en tu browser:
+la velocidad real, si los textos suenan naturales, si funciona
+bien en el celular, si el copy-paste anda, etc.
+
+Te puedo generar un checklist interactivo para que lo hagas cuando
+quieras. ¿Cuándo preferís?
+
+• "Después de cada Journey" — siempre te lo genero y te aviso
+• "Cuando los scores superen 8" — solo cuando el producto ya
+  esté maduro (recomendado)
+• "Yo te aviso" — nunca te lo pido, solo lo hago si vos me decís
+```
+
+Guardar la preferencia en el config como:
+```yaml
+manual_review:
+  trigger: "after_journey" | "scores_above_8" | "on_demand"
+```
+
 Con las respuestas, generá `.claude/orchestrate.yml` y mostráselo al usuario para confirmar antes de guardarlo.
 
 ### Modo 2: Config existe (`.claude/orchestrate.yml` encontrado)
@@ -427,6 +451,18 @@ de cada score, no solo el número. Para cada persona:
 
 Sin desglose, el Control no puede priorizar qué arreglar primero.
 
+**IMPORTANTE para Journey sessions — sugerencia al final del resumen:**
+Al final del resumen que el Journey muestra en el chat (no en el spoke_report,
+sino en la conversación con el usuario), incluir como última línea una
+sugerencia sutil, NO como pregunta:
+
+> "💡 Si quieres, puedes probar la app tú mismo — dile al Control
+> 'quiero revisar la app' y te genera un checklist interactivo."
+
+Esto va SIEMPRE, como parte natural del cierre del resumen. No es un modal,
+no es una pregunta que espere respuesta — es información que el usuario
+puede actuar o ignorar.
+
 Creá el archivo memory/spoke_report_{tipo}.md con este contenido:
 
 ```markdown
@@ -467,11 +503,28 @@ Mostrá este mensaje al usuario:
 ---FIN DEL BLOQUE---
 ```
 
-#### Paso 5b: Generar checklist HTML para QA manual del usuario
+#### Paso 5b: Checklist HTML para QA manual del usuario (condicional)
 
-Después de cada ciclo de validación (Session A + B), el Control DEBE generar
-un **checklist HTML interactivo** para que el usuario humano pruebe la app
-manualmente. Las sesiones automáticas (QA + Journey) cubren el 80% de los
+La generación del checklist depende de la preferencia `manual_review.trigger`
+del config:
+
+- `"after_journey"` → generar después de CADA Journey
+- `"scores_above_8"` → generar SOLO cuando TODOS los roles tienen score > 8
+  (leer scores del último spoke_report_journey o del handoff)
+- `"on_demand"` → NO generar automáticamente. Solo si el usuario dice
+  "quiero revisar la app" o similar
+
+Si la condición no se cumple, NO mencionar el checklist. El Journey ya
+incluye la sugerencia sutil al final del resumen ("si quieres, puedes
+probar la app tú mismo").
+
+Cuando la condición SÍ se cumple, generar el checklist y decir:
+> "Los scores de los 3 roles superaron 8. Es buen momento para que pruebes
+> la app personalmente. Generé un checklist en `docs/qa/demo-checklist.html`."
+
+Después de cada ciclo de validación (Session A + B) y si la condición aplica,
+el Control genera un **checklist HTML interactivo** para que el usuario pruebe
+la app manualmente. Las sesiones automáticas (QA + Journey) cubren el 80% de los
 casos, pero siempre hay cosas que solo un humano nota:
 
 - Sensación de velocidad (¿se siente lento?)
