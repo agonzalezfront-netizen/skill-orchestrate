@@ -549,6 +549,7 @@ casos, pero siempre hay cosas que solo un humano nota:
    - **Badges por flujo** que cambian de color según estado
    - **Persistencia en localStorage** (el usuario puede cerrar y volver)
    - **Botón "Copiar issues"** que exporta todos los issues al clipboard formateados para pegar en el Control
+   - **Estado "Todo OK"** cuando todos los pasos están en pass: mostrar un mensaje verde de éxito (ej: "✓ Todos los fixes verificados — 0 issues") con un botón "Decirle al Control que todo pasó" que copia un texto simple al clipboard
    - **Links directos de login** para cada rol (clickeables)
    - **Tags por paso**: verificar (azul), acción (morado), crítico (rojo)
 5. Decirle al usuario con TODA la info que necesita para abrirlo:
