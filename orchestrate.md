@@ -467,7 +467,51 @@ Mostrá este mensaje al usuario:
 ---FIN DEL BLOQUE---
 ```
 
-#### Paso 5: Cierre de Control Session (obligatorio antes de cerrar o pausar)
+#### Paso 5b: Generar checklist HTML para QA manual del usuario
+
+Después de cada ciclo de validación (Session A + B), el Control DEBE generar
+un **checklist HTML interactivo** para que el usuario humano pruebe la app
+manualmente. Las sesiones automáticas (QA + Journey) cubren el 80% de los
+casos, pero siempre hay cosas que solo un humano nota:
+
+- Sensación de velocidad (¿se siente lento?)
+- Flujo natural (¿dónde haría click instintivamente?)
+- Textos y tono (¿suena natural o robótico?)
+- Mobile real en un celular real (no un resize de browser)
+- Copy-paste funciona (clipboard, WhatsApp, Excel)
+- Acentos, formato de fechas, moneda, RUT
+
+**Cómo generar el checklist:**
+
+1. Leer `product.modules` y `product.test_accounts` del config
+2. Para cada rol de test_account, crear un flujo con pasos que cubran:
+   - Login → primera vista → navegación principal
+   - La feature/acción más importante de ese rol
+   - Un caso cross-role (bidireccionalidad entre roles)
+3. Generar un archivo HTML autocontenido en `docs/qa/demo-checklist.html`
+4. El HTML debe tener:
+   - **Dos botones por paso**: ✓ Pass (verde) y ! Issue (rojo)
+   - **Textarea** que aparece al marcar Issue (para describir el problema)
+   - **Barra de progreso** global con ratio pass/issue
+   - **Badges por flujo** que cambian de color según estado
+   - **Persistencia en localStorage** (el usuario puede cerrar y volver)
+   - **Botón "Copiar issues"** que exporta todos los issues al clipboard formateados para pegar en el Control
+   - **Links directos de login** para cada rol (clickeables)
+   - **Tags por paso**: verificar (azul), acción (morado), crítico (rojo)
+5. Decirle al usuario:
+   > "Generé un checklist en `docs/qa/demo-checklist.html`. Abrilo en tu
+   > browser, probá cada paso, marcá pass o issue. Cuando termines, click
+   > 'Copiar issues' y pegame el resultado acá."
+
+**Cuándo re-generar el checklist:**
+- Después de cada batch de features/fixes (los pasos pueden haber cambiado)
+- Cuando se agrega un módulo nuevo al config
+- Cuando el usuario pide "actualizá el checklist"
+
+**El checklist NO reemplaza Session A ni B** — las complementa. Es la capa
+de validación humana que cubre lo que la IA no puede ver.
+
+#### Paso 6: Cierre de Control Session (obligatorio antes de cerrar o pausar)
 
 Cuando el usuario indica que quiere cerrar, pausar, o "retomar mañana", SIEMPRE
 actualizar `memory/handoff_next_session.md` con:

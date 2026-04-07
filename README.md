@@ -341,6 +341,30 @@ Every time you run `/orchestrate`, the skill diagnoses which state your project 
 
 This diagnosis runs **automatically** — you don't need to tell the skill "I was away for 2 weeks." It figures it out from git timestamps.
 
+## Three layers of validation
+
+The skill uses 3 complementary validation layers — each catches what the others miss:
+
+| Layer | Who runs it | What it catches | Example |
+|---|---|---|---|
+| **Session A (QA)** | Claude (automated) | Bugs, broken endpoints, permission errors, edge cases | "POST /contact returns 403 for demo users" |
+| **Session B (Journey)** | Claude (simulated personas) | UX friction, feature gaps, scoring, prospect reaction | "Director expected export button and didn't find it" |
+| **Manual Checklist** | **You** (the human) | Feel, speed, mobile real, tone, clipboard, accents | "Templates sound Argentine, not neutral Spanish" |
+
+**Session A + B catch ~80% of issues.** The manual checklist catches the remaining 20% — things that only a real human using a real browser on a real device will notice.
+
+### Manual checklist: HTML interactive tool
+
+After each validation cycle, the Control generates `docs/qa/demo-checklist.html` — an interactive HTML file you open in your browser to walk through the app manually:
+
+- **Two buttons per step**: ✓ Pass (green) or ! Issue (red with textarea)
+- **Progress bar** showing pass/issue ratio per flow and overall
+- **Direct login links** for each role (click and go)
+- **LocalStorage persistence** — close and come back, your checks are saved
+- **"Copy issues" button** — exports all marked issues formatted for pasting back into the Control Session
+
+The checklist is auto-generated from `product.modules` and `product.test_accounts` in your config — so it adapts to YOUR app, not a generic template.
+
 ## Re-validation cycle
 
 After shipping a batch of features/fixes, the skill recommends re-validation before continuing with new work:
@@ -630,6 +654,30 @@ Cada vez que corrés `/orchestrate`, el skill diagnostica en qué estado está t
 | **Config obsoleta** | Paths/comandos no funcionan | Verifica cada entrada, ofrece re-configurar |
 
 El diagnóstico corre **automáticamente** — no necesitás decirle "estuve 2 semanas afuera".
+
+## Tres capas de validación
+
+El skill usa 3 capas complementarias — cada una atrapa lo que las otras no ven:
+
+| Capa | Quién la corre | Qué atrapa |
+|---|---|---|
+| **Session A (QA)** | Claude (automático) | Bugs, endpoints rotos, permisos, edge cases |
+| **Session B (Journey)** | Claude (personas simuladas) | Fricción UX, gaps de features, scores |
+| **Checklist manual** | **Vos** (el humano) | Velocidad real, tono, mobile real, clipboard, acentos |
+
+Session A + B cubren ~80%. El checklist manual cubre el 20% restante — las cosas que solo un humano con un browser real nota.
+
+### Checklist manual: herramienta HTML interactiva
+
+Después de cada ciclo de validación, el Control genera `docs/qa/demo-checklist.html`:
+
+- **Dos botones por paso**: ✓ Pass o ! Issue (con textarea para describir)
+- **Barra de progreso** con ratio pass/issue
+- **Links directos de login** por rol
+- **Persistencia en localStorage** (cerrás y volvés, tus checks siguen)
+- **"Copiar issues"** exporta todo formateado para pegar en el Control
+
+Se genera automáticamente desde `product.modules` y `product.test_accounts` — se adapta a TU app.
 
 ## Ciclo de re-validación
 
